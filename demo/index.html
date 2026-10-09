@@ -82,7 +82,7 @@
   main {
     max-width: 680px;
     margin: 0 auto;
-    padding: 0 24px 120px;
+    padding: 0 24px 80px;
   }
   main h3 { margin-top: 40px; }
   code {
@@ -100,6 +100,47 @@
     font-size: 13.5px;
     line-height: 1.7;
   }
+  /* 花谱 */
+  .gallery {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .gallery h3 { text-align: center; margin: 8px 0 6px; }
+  .gallery .sub { text-align: center; opacity: 0.65; font-size: 13px; margin: 0 0 28px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 10px;
+  }
+  .cell {
+    position: relative;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1.5px solid rgba(91, 70, 54, 0.18);
+    border-radius: 12px;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .cell:hover { transform: translateY(-3px); border-color: var(--ink); }
+  .cell img { width: 86%; height: 86%; object-fit: contain; }
+  .cell span {
+    position: absolute;
+    bottom: 4px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10.5px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+  }
+  .cell:hover span { opacity: 0.7; }
   footer {
     text-align: center;
     padding: 24px 0 40px;
@@ -113,7 +154,7 @@
 <header>
   <h1>繁 花</h1>
   <p>Fanhua — 每一次点击，都在指尖开出一朵手绘小花</p>
-  <p>103 种花 · 程序化生成 · 每朵都独一无二 · 零依赖</p>
+  <p id="tagline">100 张手绘花朵贴图 · 25 种花 × 4 色 · 零依赖</p>
   <span class="hint">🌼 在页面任意处点击试试（这朵提示框除外）</span>
 </header>
 
@@ -138,6 +179,11 @@
     <input id="duration" type="number" value="3000" min="0" step="500">
     <small>ms 后逐渐淡出，0 = 永驻</small>
   </div>
+  <div class="row">
+    <label>随机旋转</label>
+    <input id="rotate" type="number" value="12" min="0" max="180" step="2">
+    <small>度，0 = 都摆正</small>
+  </div>
   <div class="actions">
     <button id="apply">应用参数</button>
     <button id="random" class="ghost">随机开十朵</button>
@@ -155,15 +201,24 @@
     duration: 3000,    // 0 = 永驻
   })
 &lt;/script&gt;</code></pre>
+  <p>插件会从自己所在的目录旁边找 <code>img/flowers/</code>。如果你的目录结构不一样，加一个 <code>imgBase</code> 指过去就行：</p>
+  <pre><code>Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })</code></pre>
 
-  <h3>为什么是手绘感？</h3>
-  <p>每一朵花都不是贴图，而是用代码当场"画"出来的 SVG：花瓣的轮廓由带抖动的贝塞尔曲线勾勒，每个花瓣的长短、开角、朝向都略有随机，很多花瓣还会被铅笔淡淡地再勾一道线。所以即使点到同一个位置两次，开出来的两朵花也不会一模一样。</p>
-  <p>上色也不是一块平涂——每朵花都自带一组渐变，花瓣从瓣根到瓣尖由深转浅，后面再垫一层错位的花瓣，花心留一点暖光，于是平面的图形也有了厚度，像贴在纸上的插画。</p>
-  <p>花型来自 18 种原型的组合——雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、风铃草……再乘上 16 组手绘蜡笔感的配色，共 103 个命名花种，点击时随机抽选。</p>
+  <h3>花是怎么来的</h3>
+  <p>每一朵都是先用手绘插画的画风生成，再处理成透明底的方形贴图：抠掉白背景、按花朵本体裁切居中、缩到 192px 并压缩。点击时从 100 张里随机抽一张贴上，所以同一页开出来的花几乎不会重样。</p>
+  <p>花型有 25 种——雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、风铃草、芍药、牡丹、桔梗、鸢尾、百合、康乃馨、小苍兰、木槿、山茶、矢车菊、波斯菊、玉兰、大丽花、银莲花……每一种都配了 4 种颜色，加起来正好 100 张。</p>
+  <p>默认会在页面空闲时把 100 张图悄悄下下来，等你点击时就能立刻开花；不想让它占带宽的话，把 <code>preload</code> 关掉或者给个数字，就变成用到才加载。</p>
+
   <h3>滚到这里啦</h3>
   <p>如果你把定位方式切成 <code>page</code>，在这里点下的花会跟着页面一起滚动，像真的开在纸面上；如果切成 <code>screen</code>，花会钉在屏幕的那一点，页面怎么动它都不挪窝。试试就知道。</p>
   <p>存活时间调成 <code>0</code> 的话，花会一直开着——开满一整页也是被允许的，"落花扫地"按钮随时可以帮你收拾。</p>
 </main>
+
+<section class="gallery">
+  <h3>花谱</h3>
+  <p class="sub" id="gallerySub">全部 100 张</p>
+  <div class="grid" id="grid"></div>
+</section>
 
 <footer>繁花 Fanhua · MIT License · 点击即开花 🌸</footer>
 
@@ -177,6 +232,7 @@
       size: [Math.min(min, max), Math.max(min, max)],
       position: $('position').value,
       duration: Math.max(0, parseFloat($('duration').value) || 0),
+      rotate: Math.max(0, parseFloat($('rotate').value) || 0),
     })
   }
 
@@ -196,7 +252,24 @@
   })
   $('wipe').addEventListener('click', () => Fanhua.clear())
 
-  Fanhua.init({ size: [40, 110], position: 'page', duration: 3000 })
+  // 花谱：把图库整个铺出来
+  const grid = $('grid')
+  for (const f of Fanhua.FLOWERS) {
+    const cell = document.createElement('div')
+    cell.className = 'cell'
+    const img = document.createElement('img')
+    img.src = '../img/flowers/' + f.file
+    img.alt = f.name
+    img.loading = 'lazy'
+    const label = document.createElement('span')
+    label.textContent = f.name
+    cell.append(img, label)
+    grid.appendChild(cell)
+  }
+  $('gallerySub').textContent = `全部 ${Fanhua.FLOWER_COUNT} 张 · 悬停看花名`
+  $('tagline').textContent = `${Fanhua.FLOWER_COUNT} 张手绘花朵贴图 · 25 种花 × 4 色 · 零依赖`
+
+  Fanhua.init({ size: [40, 110], position: 'page', duration: 3000, rotate: 12 })
 </script>
 
 </body>

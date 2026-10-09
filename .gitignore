@@ -2,3 +2,6 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# 生图管线（含 API key），不进版本库
+txt2img/

@@ -2,18 +2,18 @@
 
 > 每一次点击，都在指尖开出一朵手绘小花。
 
-繁花是一个零依赖的原生 JS 插件：点击页面任意位置，点击处会随机绽放一朵程序化生成的手绘风格小花。18 种花型 × 16 组蜡笔配色，共 **103 个命名花种**，而且每朵花的轮廓、花瓣、勾线都由随机种子驱动——即使是同一种花，也不会有两朵一模一样。
+繁花是一个零依赖的原生 JS 插件：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **100 张透明底贴图**——25 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
 
 ![demo](demo/demo.png)
 
 ## 特性
 
-- 🎨 **手绘 + 插画质感**：花瓣由带抖动的贝塞尔曲线勾边，再叠上"从花心到瓣尖"的渐变、一层后瓣与花心高光，平面图形也有厚度
-- 🌼 **103 种花**：雏菊、玫瑰、樱花、向日葵、郁金香、绣球、风铃草……点击时随机抽选
-- 📐 **大小可定制**：支持区间随机或固定大小
+- 🌼 **100 张花贴图**：雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、芍药、牡丹、桔梗、鸢尾、百合、康乃馨……25 种花各配 4 色
+- 🎨 **手绘插画质感**：铅笔勾线 + 柔和渐变上色，花朵本体裁切居中、透明底，落在任何背景上都干净
+- 📐 **大小可定制**：支持区间随机或固定大小，还能随机旋转
 - 📌 **两种定位**：跟随页面滚动，或固定在屏幕上
 - ⏳ **可控存活时间**：到时逐渐淡出，也可以选择永驻
-- 📦 **零依赖**：~6KB min+gzip，ESM / CJS / IIFE 三种格式
+- 📦 **零依赖**：插件本体 ~2KB min+gzip，ESM / CJS / IIFE 三种格式
 
 ## 安装
 
@@ -26,6 +26,8 @@ npm install fanhua
 ```html
 <script src="dist/fanhua.iife.js"></script>
 ```
+
+花图在 `img/flowers/` 里，跟着插件一起发布即可。
 
 ## 快速上手
 
@@ -45,6 +47,14 @@ Fanhua.init({
 
 搞定——现在点击页面任意处都会开花。
 
+### 图片路径
+
+插件默认从**自己所在的目录旁边**找图库（`dist/fanhua.iife.js` → `../img/flowers/`），所以在页面上直接引 `dist/` 或 `img/` 时不用管它。目录结构不一样的话，用 `imgBase` 指过去：
+
+```js
+Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })
+```
+
 ## API
 
 ### `Fanhua.init(options?)`
@@ -56,7 +66,12 @@ Fanhua.init({
 | `size` | `number \| [number, number]` | `[40, 110]` | 单个数字 = 每朵花固定为该大小；两个数字 = 在 `[min, max]` 区间内随机 |
 | `position` | `'page' \| 'screen'` | `'page'` | `page`：花落在文档上，随页面滚动；`screen`：花钉在视口上，不随滚动移动 |
 | `duration` | `number` | `3000` | 绽放多少毫秒后开始逐渐淡出；`0` = 永驻不消失 |
+| `rotate` | `number` | `12` | 随机旋转的角度上限（±），`0` = 全部摆正 |
+| `imgBase` | `string \| null` | `null` | 图库根路径，`null` = 自动推断 |
+| `preload` | `boolean \| number` | `true` | `true` 空闲时预热全部 100 张；`false` 用到才加载；数字 = 只预热 N 张（随机挑） |
 | `zIndex` | `number` | `2147483647` | 花朵的层叠层级 |
+
+> 100 张图合计约 4 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
 
 ### `Fanhua.setOptions(options?)`
 
@@ -74,6 +89,10 @@ Fanhua.setOptions({ duration: 0 }) // 之后开的花永驻
 Fanhua.bloom(innerWidth / 2, innerHeight / 2, { size: 120 })
 ```
 
+### `Fanhua.preload(count?)`
+
+主动预热图库，不传参数就是全部。
+
 ### `Fanhua.clear()`
 
 清掉页面上所有的花。
@@ -82,20 +101,35 @@ Fanhua.bloom(innerWidth / 2, innerHeight / 2, { size: 120 })
 
 移除点击监听（已开的花保留）。
 
-### `Fanhua.FLOWER_COUNT`
+### `Fanhua.FLOWERS` / `Fanhua.FLOWER_COUNT`
 
-当前花种总数。
+图库清单与总数。每条记录形如 `{ id, name, species, file }`，可以拿来自己铺一个花谱：
+
+```js
+Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
+```
+
+## 花图是怎么来的
+
+先定一张手绘雏菊作为画风锚点（[img/daisy.png](img/daisy.png)），用同一段风格描述生成 25 种花各 4 色，再统一处理成精灵图：
+
+1. 关掉水印出图，白底近白像素从四边洪水填充判为背景——用连通性而不是全局阈值，花瓣内部的高光才不会被一起抠掉
+2. 贴着背景的一圈按"离纯白多远"做柔和过渡，保住抗锯齿边缘
+3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 192px（颜色按预乘 alpha 平均，边缘不出深色描边）
+4. 逐行挑最省的 PNG 滤波方式后 deflate
+
+`npm test` 会逐张复核尺寸、透明底、留白与居中，防止某张图被裁断或没抠干净。
 
 ## 本地开发
 
 ```bash
 npm install
 npm run build   # 打包 dist/
-npm test        # 花种生成自检
+npm test        # 图库自检：100 张、透明底、居中不裁断
 npm run serve   # 启动 demo：http://localhost:4173
 ```
 
-打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式与存活时间。
+打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部 100 张的花谱。
 
 ## License
 
