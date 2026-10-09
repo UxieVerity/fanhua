@@ -12,9 +12,11 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "demo": "node build.mjs && npx serve demo"
+    "test": "node scripts/test.mjs",
+    "serve": "node scripts/serve.mjs"
   },
   "keywords": [
     "click",
