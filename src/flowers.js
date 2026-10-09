@@ -61,19 +61,17 @@ function lum(hex) {
 // ---------- 路径工具 ----------
 
 // 抖动多边形 → 平滑闭合曲线
+// 用"过中点画二次贝塞尔"的经典做法：每个采样点只出一个 Q（两个数），
+// 比每个点一段三次贝塞尔省掉近一半路径数据 —— 花瓣多了这很关键。
 function closedCurve(pts) {
   const n = pts.length
-  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  const mx = (i) => ((pts[i][0] + pts[(i + 1) % n][0]) / 2).toFixed(1)
+  const my = (i) => ((pts[i][1] + pts[(i + 1) % n][1]) / 2).toFixed(1)
+  let d = `M${mx(n - 1)} ${my(n - 1)}`
   for (let i = 0; i < n; i++) {
-    const p0 = pts[i]
-    const p1 = pts[(i + 1) % n]
-    const dx = p1[0] - p0[0]
-    const dy = p1[1] - p0[1]
-    d += ` C ${(p0[0] + dx * 0.35).toFixed(1)} ${(p0[1] + dy * 0.35).toFixed(1)}` +
-      ` ${(p1[0] - dx * 0.35).toFixed(1)} ${(p1[1] - dy * 0.35).toFixed(1)}` +
-      ` ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`
+    d += `Q${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)} ${mx(i)} ${my(i)}`
   }
-  return d + ' Z'
+  return d + 'Z'
 }
 
 function wobblyCircle(r, rad, wobble = 0.12) {
@@ -88,66 +86,132 @@ function wobblyCircle(r, rad, wobble = 0.12) {
 }
 
 // ---------- 花瓣 ----------
-// 以原点为花心、花瓣沿 -y 方向生长，再整体 rotate(a)。
-// style: round 圆润 | pointed 尖头 | notched 缺刻(樱花/波斯菊) | thin 细长 | cupped 杯状(玫瑰)
-function petal(r, a, len, hw, style, fill, ink, sw, opts = {}) {
-  const len2 = len * j(r, 0.06)
-  const tipX = style === 'pointed' ? rnd(r, -2.5, 2.5) : rnd(r, -hw * 0.25, hw * 0.25)
-  let d
-  if (style === 'notched') {
-    const tipW = hw * 0.5 * j(r, 0.3)
-    const dip = len2 * rnd(r, 0.8, 0.9)
-    d = `M 0 0 C ${-hw} ${-len2 * 0.28} ${-hw * 1.05} ${-len2 * 0.8} ${-tipW} ${-len2}` +
-      ` L ${rnd(r, -1.5, 1.5).toFixed(1)} ${-dip} L ${tipW} ${-len2}` +
-      ` C ${hw * 1.05} ${-len2 * 0.82} ${hw} ${-len2 * 0.3} 0 0 Z`
-  } else if (style === 'pointed') {
-    const c2 = hw * 0.45
-    d = `M 0 0 C ${-hw} ${-len2 * 0.25} ${-c2} ${-len2 * 0.85} ${tipX} ${-len2}` +
-      ` C ${c2} ${-len2 * 0.85} ${hw} ${-len2 * 0.25} 0 0 Z`
-  } else if (style === 'cupped') {
-    // 杯状：两侧饱满外张，顶端宽圆，玫瑰用
-    d = `M 0 0 C ${-hw * 1.15} ${-len2 * 0.3} ${-hw * 1.05} ${-len2 * 0.98} ${tipX} ${-len2 * 1.02}` +
-      ` C ${hw * 1.05} ${-len2 * 0.98} ${hw * 1.15} ${-len2 * 0.3} 0 0 Z`
-  } else {
-    const spread = hw * (style === 'thin' ? 0.55 : 1)
-    d = `M 0 0 C ${-spread} ${-len2 * 0.3} ${-spread * 0.9} ${-len2 * 0.8} ${tipX} ${-len2}` +
-      ` C ${spread * 0.9} ${-len2 * 0.8} ${spread} ${-len2 * 0.3} 0 0 Z`
-  }
-  const rot = `rotate(${a.toFixed(1)})`
-  let s = opts.noStroke
-    ? `<path d="${d}" transform="${rot}" fill="${fill}"${opts.opacity ? ` opacity="${opts.opacity}"` : ''}/>`
-    : `<path d="${d}" transform="${rot}" fill="${fill}" stroke="${ink}" stroke-width="${sw}"/>`
-  // 铅笔第二笔：淡淡地再勾一次轮廓，是"手绘感"的关键
-  if (!opts.noStroke && r() < 0.45) {
-    s += `<path d="${d}" transform="${rot} translate(${rnd(r, -1.2, 1.2).toFixed(1)} ${rnd(r, -1.2, 1.2).toFixed(1)})"` +
-      ` fill="none" stroke="${ink}" stroke-width="${(sw * 0.7).toFixed(1)}" opacity="0.28"/>`
-  }
-  return s
+// 花瓣轮廓由一条"宽度曲线"生成：t 从瓣根 0 走到瓣尖 1，
+// 该处半宽 = hw · sin(π(a+(b−a)t))^k，base 控制瓣根收成一点的速度，
+// 最后叠一层正弦波让边缘起伏 —— 参考图里花瓣边缘"活"起来就靠它。
+// wave/wn 是波浪的幅度与频率，改成高频小振幅就是流苏边。
+
+const PETAL_SHAPES = {
+  round:     { a: 0.06, b: 0.86, k: 0.55, base: 0.20, wave: 0.07, wn: [3, 4] },
+  oval:      { a: 0.04, b: 0.94, k: 0.62, base: 0.22, wave: 0.06, wn: [3, 4] },
+  cupped:    { a: 0.05, b: 0.82, k: 0.45, base: 0.22, wave: 0.08, wn: [3, 4] },
+  pointed:   { a: 0.06, b: 1.00, k: 1.00, base: 0.18, wave: 0.05, wn: [3, 4] },
+  lance:     { a: 0.06, b: 1.00, k: 0.85, base: 0.16, wave: 0.05, wn: [3, 4] },
+  thin:      { a: 0.06, b: 0.96, k: 0.70, base: 0.20, wave: 0.04, wn: [3, 4], scale: 0.5 },
+  strap:     { a: 0.06, b: 0.97, k: 0.75, base: 0.24, wave: 0.04, wn: [3, 4], scale: 0.4 },
+  spatulate: { a: 0.03, b: 0.80, k: 0.50, base: 0.42, wave: 0.06, wn: [3, 4] },
+  obovate:   { a: 0.04, b: 0.82, k: 0.48, base: 0.32, wave: 0.07, wn: [3, 4] },
+  notched:   { a: 0.06, b: 0.94, k: 0.72, base: 0.20, wave: 0.06, wn: [3, 4], notch: true },
+  heart:     { a: 0.05, b: 0.90, k: 0.62, base: 0.20, wave: 0.07, wn: [3, 4], notch: true, notchDepth: 0.80 },
+  frilled:   { a: 0.05, b: 0.86, k: 0.50, base: 0.22, wave: 0.13, wn: [5, 7] },
+  fringed:   { a: 0.05, b: 0.92, k: 0.60, base: 0.22, wave: 0.18, wn: [7, 10] },
+  curled:    { a: 0.06, b: 0.88, k: 0.58, base: 0.20, wave: 0.09, wn: [3, 4] },
 }
 
-// 内瓣阴影：一片缩小的同形花瓣，半透明压在瓣根，做出层次
-function innerShade(r, a, len, hw, style, fill) {
-  return petal(r, a + rnd(r, -6, 6), len * 0.55, hw * 0.55, style, fill, INK, 0, {
-    noStroke: true,
-    opacity: 0.5,
-  })
+// 当前渲染的细节档位（0~1），由 renderFlower 按显示尺寸设定：
+// 小尺寸下少采样、少画叶脉，免得糊成一团
+let DETAIL = 1
+
+// 瓣内的放射状叶脉：参考图的"铅笔感"来自它，明暗由排线密度承担。
+// 同一片花瓣的所有叶脉并成一条 path（共用描边属性），省掉大量重复标签。
+function petalVeins(r, len, hw, ink) {
+  const n = Math.max(2, Math.round(irnd(r, 4, 7) * (0.5 + 0.5 * DETAIL)))
+  const op = rnd(r, 0.18, 0.36).toFixed(2)
+  let d = ''
+  for (let i = 0; i < n; i++) {
+    const u = ((i + 0.5) / n) * 2 - 1
+    const x0 = u * hw * 0.3
+    const x1 = u * hw * 0.85
+    const y0 = -len * rnd(r, 0.1, 0.2)
+    const y1 = -len * rnd(r, 0.58, 0.92)
+    const cx = (x0 + x1) * 0.5 + rnd(r, -2, 2)
+    d += `M${x0.toFixed(1)} ${y0.toFixed(1)}Q${cx.toFixed(1)} ${((y0 + y1) * 0.5).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`
+  }
+  return `<path d="${d}" fill="none" stroke="${ink}" stroke-width="0.5" opacity="${op}"/>`
+}
+
+// 以原点为花心、花瓣沿 -y 方向生长，不旋转 —— 花瓣本体
+function petalBody(r, len, hw, shape, fill, ink, sw, opts = {}) {
+  const S = PETAL_SHAPES[shape] || PETAL_SHAPES.round
+  const len2 = len * j(r, 0.06)
+  const waveAmp = S.wave * rnd(r, 0.75, 1.3)
+  const waveN = irnd(r, S.wn[0], S.wn[1])
+  // 采样点要够密才画得出波浪；高频边（皱边/流苏）自然要多采几个点
+  const N = Math.max(
+    Math.round(11 * (0.65 + 0.35 * DETAIL)),
+    Math.min(20, Math.round(waveN * 2.4 + 3))
+  )
+  const phase = r() * Math.PI * 2
+  const scale = hw * (S.scale || 1)
+  const half = []
+  for (let i = 0; i <= N; i++) {
+    const t = i / N
+    let w = Math.pow(Math.sin(Math.PI * (S.a + (S.b - S.a) * t)), S.k)
+    // 瓣根用 smoothstep 收拢：线性 min() 会在 t=base 处留一道折角，
+    // 花瓣看上去就成了"圆角矩形"
+    const u = Math.min(1, t / S.base)
+    w *= u * u * (3 - 2 * u)
+    w *= 1 + waveAmp * Math.sin(waveN * Math.PI * t + phase)
+    half.push([w * scale, -len2 * t])
+  }
+  const pts = []
+  for (let i = 0; i <= N; i++) pts.push([-half[i][0], half[i][1]])
+  if (S.notch) pts.push([rnd(r, -1.5, 1.5), -len2 * (S.notchDepth ?? 0.86)])
+  for (let i = N; i >= 1; i--) pts.push([half[i][0], half[i][1]])
+  const d = closedCurve(pts)
+
+  let inner = opts.noStroke
+    ? `<path d="${d}" fill="${fill}"${opts.opacity ? ` opacity="${opts.opacity}"` : ''}/>`
+    : `<path d="${d}" fill="${fill}" stroke="${ink}" stroke-width="${sw}"/>`
+  if (!opts.noStroke) {
+    if (DETAIL > 0.45) inner += petalVeins(r, len2, hw, ink)
+    // 铅笔第二笔：淡淡地再勾一次轮廓，是"手绘感"的关键
+    if (r() < 0.3) {
+      inner += `<path d="${d}" transform="translate(${rnd(r, -1.2, 1.2).toFixed(1)} ${rnd(r, -1.2, 1.2).toFixed(1)})"` +
+        ` fill="none" stroke="${ink}" stroke-width="${(sw * 0.7).toFixed(1)}" opacity="0.25"/>`
+    }
+  }
+  return inner
+}
+
+// 以原点为花心、花瓣沿 -y 方向生长，再整体 rotate(a)
+function petal(r, a, len, hw, shape, fill, ink, sw, opts = {}) {
+  return `<g transform="rotate(${a.toFixed(1)})">${petalBody(r, len, hw, shape, fill, ink, sw, opts)}</g>`
+}
+
+// 同一圈里的花瓣共用一份图形：把花瓣本体注册进 <defs>，返回它的 id。
+// 花瓣数翻倍而体积几乎不涨，代价只是同圈花瓣形状一致（靠 rotate/scale 拉开差异）。
+// id 前缀是这朵花的 uid —— 否则同页多朵花会互相抢到对方的图形。
+let PETAL_DEFS = []
+let DEF_PREFIX = ''
+function petalDef(r, len, hw, shape, fill, ink, sw, opts) {
+  const id = `${DEF_PREFIX}x${PETAL_DEFS.length}`
+  PETAL_DEFS.push(`<g id="${id}">${petalBody(r, len, hw, shape, fill, ink, sw, opts)}</g>`)
+  return id
 }
 
 // back 传入时，先在后面铺一层更长、更深的错位花瓣，让花冠饱满起来
 function petalRing(r, { count, len, hw, style, fill, ink, sw, shading = null, a0 = 0, back = null }) {
   let s = ''
   if (back) {
+    const bIds = [petalDef(r, len * 1.18, hw, style, back, ink, sw * 0.9), petalDef(r, len * 1.18, hw, style, back, ink, sw * 0.9)]
     for (let i = 0; i < count; i++) {
       const a = a0 + ((i + 0.5) * 360) / count + rnd(r, -6, 6)
-      s += petal(r, a, len * rnd(r, 1.1, 1.26), hw * rnd(r, 0.92, 1.08), style, back, ink, sw * 0.9)
+      s += `<use href="#${bIds[irnd(r, 0, 1)]}" transform="rotate(${a.toFixed(1)})"/>`
     }
   }
+  const nv = Math.max(1, Math.min(3, Math.round(count / 5)))
+  const ids = []
+  for (let k = 0; k < nv; k++) ids.push(petalDef(r, len, hw, style, fill, ink, sw))
+  // 内瓣阴影：一片缩小的同形花瓣，半透明压在瓣根，做出层次
+  const shadeId = shading ? petalDef(r, len * 0.55, hw * 0.55, style, shading, ink, 0, { noStroke: true, opacity: 0.5 }) : ''
   for (let i = 0; i < count; i++) {
     const a = a0 + (i * 360) / count + rnd(r, -5, 5)
-    const l = len * rnd(r, 0.86, 1.12)
-    const w = hw * rnd(r, 0.82, 1.15)
-    s += petal(r, a, l, w, style, fill, ink, sw)
-    if (shading) s += innerShade(r, a, l, w, style, shading)
+    const sx = rnd(r, 0.9, 1.1)
+    const sy = rnd(r, 0.86, 1.12)
+    const tf = `rotate(${a.toFixed(1)}) scale(${sx.toFixed(2)} ${sy.toFixed(2)})`
+    s += `<use href="#${ids[irnd(r, 0, nv - 1)]}" transform="${tf}"/>`
+    if (shading) s += `<use href="#${shadeId}" transform="rotate(${(a + rnd(r, -6, 6)).toFixed(1)}) scale(${sx.toFixed(2)} ${sy.toFixed(2)})"/>`
   }
   return s
 }
@@ -227,7 +291,7 @@ const BUILDERS = {
   },
 
   sunflower(r, v, g) {
-    return petalRing(r, { count: 22, len: 44, hw: 7.5, style: 'pointed', fill: g.petal, ink: INK, sw: 1.8, shading: g.inner, back: g.back }) +
+    return petalRing(r, { count: 21, len: 44, hw: 8.5, style: 'lance', fill: g.petal, ink: INK, sw: 1.8, shading: g.inner, back: g.back }) +
       `<path d="${wobblyCircle(r, 16)}" fill="#7a4b26" stroke="${INK}" stroke-width="2"/>` +
       discCenter(r, 13, '#7a4b26', INK, 0, 18)
   },
@@ -243,23 +307,27 @@ const BUILDERS = {
       const hw = 9 + t * 9
       const a0 = i * 137.5
       const fill = i % 2 ? g.inner : g.petal
+      // 每层只留两份花瓣图形，靠 rotate/scale 铺满一圈
+      const ids = [petalDef(r, len, hw, 'cupped', fill, INK, 1.8), petalDef(r, len, hw, 'cupped', fill, INK, 1.8)]
       for (let k = 0; k < n; k++) {
         const a = a0 + (k * 360) / n + rnd(r, -9, 9)
-        s += petal(r, a, len * rnd(r, 0.92, 1.08), hw * rnd(r, 0.9, 1.1), 'cupped', fill, INK, 1.8)
+        const sx = rnd(r, 0.9, 1.1)
+        const sy = rnd(r, 0.92, 1.08)
+        s += `<use href="#${ids[irnd(r, 0, 1)]}" transform="rotate(${a.toFixed(1)})` +
+          ` scale(${sx.toFixed(2)} ${sy.toFixed(2)})"/>`
       }
     }
     return s + spiralCenter(r, INK, 1.6)
   },
 
-  // 郁金香：杯口张开的三个外瓣 + 中间探出的浅色内瓣
+  // 郁金香：杯口张开的三片外瓣 + 中间探出的浅色内瓣
   tulip(r, v, g) {
-    let s = petal(r, rnd(r, -7, 7), 47 * j(r, 0.05), 16, 'round', g.petal, INK, 2)
-    s += petal(r, rnd(r, -40, -30), 44 * j(r, 0.05), 17, 'round', g.petal, INK, 2)
-    s += petal(r, rnd(r, 30, 40), 44 * j(r, 0.05), 17, 'round', g.petal, INK, 2)
+    let s = petal(r, rnd(r, -36, -28), 51 * j(r, 0.04), 13, 'oval', g.petal, INK, 2)
+    s += petal(r, rnd(r, 28, 36), 51 * j(r, 0.04), 13, 'oval', g.petal, INK, 2)
     // 杯内暗部：夹在两侧瓣之间的一小片阴影，让杯口有深度
-    s += `<path d="M -8 -10 C -10 -26 -5 -35 0 -37 C 5 -35 10 -26 8 -10 Z" fill="${g.deep}" opacity="0.4"/>`
-    s += petal(r, rnd(r, -4, 4), 40 * j(r, 0.05), 18, 'round', g.petal, INK, 2)
-    s += petal(r, rnd(r, -10, 10), 33 * j(r, 0.05), 11, 'round', g.inner, INK, 1.5)
+    s += `<path d="M -8 -10 C -10 -26 -5 -35 0 -37 C 5 -35 10 -26 8 -10 Z" fill="${g.deep}" opacity="0.32"/>`
+    s += petal(r, rnd(r, -3, 3), 47 * j(r, 0.04), 14, 'oval', g.petal, INK, 2)
+    s += petal(r, rnd(r, -8, 8), 34 * j(r, 0.05), 9, 'oval', g.inner, INK, 1.4)
     // 花瓣之间的分瓣线
     s += `<path d="M 0 -2 Q ${rnd(r, -3, 3).toFixed(1)} -20 ${rnd(r, -5, 5).toFixed(1)} -34" fill="none" stroke="${INK}" stroke-width="1.4" opacity="0.5"/>`
     return s
@@ -283,19 +351,19 @@ const BUILDERS = {
   },
 
   chrysanthemum(r, v, g) {
-    return petalRing(r, { count: 16, len: 46, hw: 8, style: 'thin', fill: g.petal, ink: INK, sw: 1.6, back: g.back }) +
-      petalRing(r, { count: 13, len: 34, hw: 7.5, style: 'thin', fill: g.petal, shading: g.inner, ink: INK, sw: 1.6, a0: 13 }) +
-      petalRing(r, { count: 9, len: 22, hw: 7, style: 'thin', fill: g.inner, ink: INK, sw: 1.6, a0: 21 }) +
+    return petalRing(r, { count: 16, len: 46, hw: 8, style: 'spatulate', fill: g.petal, ink: INK, sw: 1.6, back: g.back }) +
+      petalRing(r, { count: 13, len: 34, hw: 7.5, style: 'spatulate', fill: g.petal, shading: g.inner, ink: INK, sw: 1.6, a0: 13 }) +
+      petalRing(r, { count: 9, len: 22, hw: 7, style: 'round', fill: g.inner, ink: INK, sw: 1.6, a0: 21 }) +
       discCenter(r, 7, g.center, INK, 1.6)
   },
 
   pansy(r, v, g) {
     // 上方两瓣小、下方三瓣大，是三色堇的标志
-    let s = petalRing(r, { count: 1, len: 30, hw: 16, style: 'round', fill: g.inner, ink: INK, sw: 2, a0: -35 })
-    s += petalRing(r, { count: 1, len: 30, hw: 16, style: 'round', fill: g.inner, ink: INK, sw: 2, a0: 35 })
-    s += petalRing(r, { count: 1, len: 38, hw: 18, style: 'round', fill: g.petal, ink: INK, sw: 2, a0: 140 })
-    s += petalRing(r, { count: 1, len: 38, hw: 18, style: 'round', fill: g.petal, ink: INK, sw: 2, a0: 180 })
-    s += petalRing(r, { count: 1, len: 38, hw: 18, style: 'round', fill: g.petal, ink: INK, sw: 2, a0: 220 })
+    let s = petalRing(r, { count: 1, len: 33, hw: 14, style: 'oval', fill: g.inner, ink: INK, sw: 2, a0: -38 })
+    s += petalRing(r, { count: 1, len: 33, hw: 14, style: 'oval', fill: g.inner, ink: INK, sw: 2, a0: 38 })
+    s += petalRing(r, { count: 1, len: 41, hw: 15, style: 'oval', fill: g.petal, ink: INK, sw: 2, a0: 138 })
+    s += petalRing(r, { count: 1, len: 41, hw: 15, style: 'oval', fill: g.petal, ink: INK, sw: 2, a0: 180 })
+    s += petalRing(r, { count: 1, len: 41, hw: 15, style: 'oval', fill: g.petal, ink: INK, sw: 2, a0: 222 })
     // 脸部的深色斑块：只占花心一小片，别糊住整朵花
     s += `<path d="${wobblyCircle(r, 6.5)}" fill="${g.center}" opacity="0.85"/>`
     s += `<circle cx="0" cy="0" r="2.6" fill="#f4dc8e" stroke="${INK}" stroke-width="0.8"/>`
@@ -393,8 +461,8 @@ const BUILDERS = {
   },
 
   carnation(r, v, g) {
-    return petalRing(r, { count: 10, len: 40, hw: 13, style: 'round', fill: g.petal, ink: INK, sw: 1.8, a0: 8 }) +
-      petalRing(r, { count: 8, len: 30, hw: 11, style: 'round', fill: g.petal, shading: g.inner, ink: INK, sw: 1.8, a0: 30 }) +
+    return petalRing(r, { count: 10, len: 40, hw: 13, style: 'frilled', fill: g.petal, ink: INK, sw: 1.8, a0: 8 }) +
+      petalRing(r, { count: 8, len: 30, hw: 11, style: 'frilled', fill: g.petal, shading: g.inner, ink: INK, sw: 1.8, a0: 30 }) +
       petalRing(r, { count: 6, len: 20, hw: 8, style: 'round', fill: g.inner, ink: INK, sw: 1.6, a0: 14 }) +
       discCenter(r, 4.5, g.center, INK, 1.5, 0)
   },
@@ -475,7 +543,7 @@ export function pickFlower(rand = Math.random) {
 // 每朵花自带一组 defs，id 用种子派生，保证同一页面上多朵花互不串色。
 // 花瓣：以花心为原点的径向渐变 —— 瓣根深、瓣尖浅，像被从里到外照亮。
 
-function flowerDefs(uid, p) {
+function flowerDefs(uid, p, extra = '') {
   // 浅色花瓣少提亮、多压暗，深色花瓣反之 —— 否则白花会糊在纸色里
   const L = lum(p.petal)
   const Li = lum(p.inner)
@@ -498,6 +566,7 @@ function flowerDefs(uid, p) {
       `<stop offset="0.62" stop-color="${p.center}"/>` +
       `<stop offset="1" stop-color="${darken(p.center, 0.26)}"/>` +
     '</radialGradient>' +
+    extra +
     '</defs>'
 }
 
@@ -514,13 +583,21 @@ function flowerTheme(uid, p) {
 // ---------- 渲染 ----------
 // 把一株花渲染成以点击点为中心的 SVG 字符串。
 
+// <use href="#id"> 是整篇文档范围内解析的，所以同一页上两朵花的 id 绝不能撞。
+// 光靠种子不够：同一个种子配不同花型，渐变会串色。加一个只增不减的序号兜底。
+let RENDER_SEQ = 0
+
 export function renderFlower(variety, sizePx, seed) {
   const r = mulberry32(seed)
-  const uid = `fh${(seed >>> 0).toString(36)}`
+  const uid = `f${(seed >>> 0).toString(36)}-${(RENDER_SEQ++).toString(36)}`
   const p = variety.p
+  // 小尺寸下收敛细节：叶脉与轮廓采样都变少，否则缩到 40px 会糊
+  DETAIL = sizePx >= 96 ? 1 : sizePx >= 64 ? 0.6 : 0.3
+  PETAL_DEFS = []
+  DEF_PREFIX = uid
   const body = BUILDERS[variety.type](r, variety, flowerTheme(uid, p))
   const rot = variety.upright ? rnd(r, -12, 12) : rnd(r, 0, 360)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120" width="${sizePx}" height="${sizePx}">` +
-    flowerDefs(uid, p) +
+    flowerDefs(uid, p, PETAL_DEFS.join('')) +
     `<g transform="rotate(${rot})" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`
 }
