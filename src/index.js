@@ -32,6 +32,8 @@ function ensureStyle() {
   pointer-events: none;
   transform: translate(-50%, -50%);
   animation: fanhua-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* 一点柔和的投影，让花从纸面上浮起来 */
+  filter: drop-shadow(0 5px 7px rgba(91, 70, 54, 0.16));
 }
 .fanhua svg { display: block; width: 100%; height: 100%; }
 .fanhua.is-fading {
