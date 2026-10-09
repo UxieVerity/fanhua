@@ -187,8 +187,10 @@ const BUILDERS = {
 
   tulip(r, v) {
     const p = v.p
-    let s = petalRing(r, { count: 2, len: 40, hw: 14, style: 'round', fill: p.petal, ink: INK, sw: 2, a0: 150 })
-    s += petal(r, 0, 46 * j(r, 0.05), 17, 'round', p.petal, INK, 2)
+    // 杯状：左右两瓣微微外撇，再叠中间那瓣
+    let s = petal(r, rnd(r, -30, -20), 40 * j(r, 0.05), 15, 'round', p.petal, INK, 2) +
+      petal(r, rnd(r, 20, 30), 40 * j(r, 0.05), 15, 'round', p.petal, INK, 2)
+    s += petal(r, rnd(r, -4, 4), 46 * j(r, 0.05), 17, 'round', p.petal, INK, 2)
     s += innerShade(r, 0, 46, 17, 'round', p.inner)
     // 花瓣之间的分瓣线
     s += `<path d="M 0 0 Q ${rnd(r, -3, 3).toFixed(1)} -22 ${rnd(r, -5, 5).toFixed(1)} -40" fill="none" stroke="${INK}" stroke-width="1.4" opacity="0.6"/>`
@@ -295,15 +297,16 @@ const BUILDERS = {
 
   bluebell(r, v) {
     const p = v.p
-    let s = `<path d="M 0 -30 L 0 -6" fill="none" stroke="${INK}" stroke-width="1.8"/>`
+    let s = `<path d="M 0 -30 L 0 -10" fill="none" stroke="${INK}" stroke-width="1.8"/>`
     const n = irnd(r, 3, 4)
     for (let i = 0; i < n; i++) {
-      const a = -50 + (i * 100) / (n - 1) + rnd(r, -8, 8)
-      const hy = -8 + Math.abs(a) * 0.16
-      const x = Math.sin((a * Math.PI) / 180) * 14
-      s += `<path d="M ${x.toFixed(1)} ${hy.toFixed(1)} L ${x.toFixed(1)} ${(hy + 8).toFixed(1)}"` +
+      // 钟形花吊在花茎下方，外圈的钟垂得更低，保持"倒挂"的姿态
+      const a = n === 1 ? 0 : -30 + (i * 60) / (n - 1) + rnd(r, -6, 6)
+      const hy = -10 + Math.abs(a) * 0.8
+      const x = Math.sin((a * Math.PI) / 180) * 26
+      s += `<path d="M ${x.toFixed(1)} ${hy.toFixed(1)} L ${x.toFixed(1)} ${(hy + 7).toFixed(1)}"` +
         ` fill="none" stroke="${INK}" stroke-width="1.3"/>`
-      s += `<g transform="translate(${x.toFixed(1)} ${(hy + 8).toFixed(1)}) rotate(${a.toFixed(1)})">` +
+      s += `<g transform="translate(${x.toFixed(1)} ${(hy + 7).toFixed(1)}) rotate(${(a * 0.5).toFixed(1)})">` +
         `<path d="M 0 0 C -8 1.5 -9.5 9 -8.5 15 L -4 12 L 0 15.5 L 4 12 L 8.5 15 C 9.5 9 8 1.5 0 0 Z"` +
         ` fill="${i % 2 === 0 ? p.petal : p.inner}" stroke="${INK}" stroke-width="1.6"/>` +
         '</g>'
@@ -349,7 +352,10 @@ const PALETTES = {
 }
 
 // ---------- 花种表 ----------
-// [花型, 中文名, 配色列表] → 组合展开成花种。目前 18 种花型、102 个命名花种。
+// [花型, 中文名, 配色列表] → 组合展开成花种。目前 18 种花型、103 个命名花种。
+
+// 有"朝向"的花型：整体只做小幅摆动，不随机打转
+const UPRIGHT_TYPES = new Set(['tulip', 'lavender', 'bluebell'])
 
 const DEFS = [
   ['daisy', '雏菊', ['雪白', '奶油', '樱粉', '绯红', '明黄', '淡紫', '天蓝', '珊瑚', '鹅黄']],
@@ -373,7 +379,13 @@ const DEFS = [
 ]
 
 export const FLOWERS = DEFS.flatMap(([type, zh, colors]) =>
-  colors.map((c) => ({ type, name: `${zh}·${c}`, p: PALETTES[c] }))
+  colors.map((c) => ({
+    type,
+    name: `${zh}·${c}`,
+    p: PALETTES[c],
+    // 有"朝向"的花（带茎、杯状）只允许小幅度摆动，不随便打转
+    upright: UPRIGHT_TYPES.has(type),
+  }))
 )
 
 export const FLOWER_COUNT = FLOWERS.length
@@ -388,7 +400,7 @@ export function pickFlower(rand = Math.random) {
 export function renderFlower(variety, sizePx, seed) {
   const r = mulberry32(seed)
   const body = BUILDERS[variety.type](r, variety)
-  const rot = rnd(r, 0, 360).toFixed(1)
+  const rot = variety.upright ? rnd(r, -12, 12) : rnd(r, 0, 360)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120" width="${sizePx}" height="${sizePx}">` +
     `<g transform="rotate(${rot})" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`
 }

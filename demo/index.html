@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>繁花 Fanhua — 点击绽放手绘小花</title>
+<script src="../dist/fanhua.iife.js"></script>
+<style>
+  :root {
+    --ink: #5b4636;
+    --paper: #faf6ee;
+    --accent: #e0777f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.8;
+  }
+  header {
+    text-align: center;
+    padding: 72px 24px 40px;
+  }
+  h1 {
+    font-size: 56px;
+    margin: 0 0 8px;
+    letter-spacing: 0.12em;
+  }
+  header p { margin: 4px 0; opacity: 0.85; }
+  .hint {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 8px 22px;
+    border: 2px dashed var(--ink);
+    border-radius: 999px;
+    opacity: 0.75;
+    font-size: 15px;
+  }
+  .panel {
+    max-width: 620px;
+    margin: 0 auto 48px;
+    padding: 20px 28px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 6px 6px 0 rgba(91, 70, 54, 0.15);
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 18px; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+  }
+  .row label { min-width: 118px; font-size: 14px; }
+  .row input, .row select {
+    font: inherit;
+    padding: 5px 10px;
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 110px;
+  }
+  .row small { opacity: 0.65; font-size: 12px; }
+  .actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit;
+    padding: 8px 20px;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  button:hover { transform: translateY(-2px); }
+  button.ghost { background: transparent; color: var(--ink); }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 0 24px 120px;
+  }
+  main h3 { margin-top: 40px; }
+  code {
+    background: rgba(91, 70, 54, 0.08);
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: #3d3229;
+    color: #f3ead9;
+    padding: 18px 22px;
+    border-radius: 12px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+  footer {
+    text-align: center;
+    padding: 24px 0 40px;
+    opacity: 0.6;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>繁 花</h1>
+  <p>Fanhua — 每一次点击，都在指尖开出一朵手绘小花</p>
+  <p>103 种花 · 程序化生成 · 每朵都独一无二 · 零依赖</p>
+  <span class="hint">🌼 在页面任意处点击试试（这朵提示框除外）</span>
+</header>
+
+<div class="panel" id="panel">
+  <h2>🎛 参数面板</h2>
+  <div class="row">
+    <label>大小范围</label>
+    <input id="minSize" type="number" value="40" min="10"> ~
+    <input id="maxSize" type="number" value="110" min="10">
+    <small>px，两值相等时固定大小</small>
+  </div>
+  <div class="row">
+    <label>定位方式</label>
+    <select id="position">
+      <option value="page" selected>page · 随页面滚动</option>
+      <option value="screen">screen · 固定屏幕</option>
+    </select>
+    <small>滚下去看看区别</small>
+  </div>
+  <div class="row">
+    <label>存活时间</label>
+    <input id="duration" type="number" value="3000" min="0" step="500">
+    <small>ms 后逐渐淡出，0 = 永驻</small>
+  </div>
+  <div class="actions">
+    <button id="apply">应用参数</button>
+    <button id="random" class="ghost">随机开十朵</button>
+    <button id="wipe" class="ghost">落花扫地</button>
+  </div>
+</div>
+
+<main>
+  <h3>快速上手</h3>
+  <pre><code>&lt;script src="fanhua.iife.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  Fanhua.init({
+    size: [40, 110],   // 或单个数字，如 80
+    position: 'page',  // 'screen' = 固定在屏幕上
+    duration: 3000,    // 0 = 永驻
+  })
+&lt;/script&gt;</code></pre>
+
+  <h3>为什么是手绘感？</h3>
+  <p>每一朵花都不是贴图，而是用代码当场"画"出来的 SVG：花瓣的轮廓由带抖动的贝塞尔曲线勾勒，每个花瓣的长短、开角、朝向都略有随机，很多花瓣还会被铅笔淡淡地再勾一道线。所以即使点到同一个位置两次，开出来的两朵花也不会一模一样。</p>
+  <p>花型来自 18 种原型的组合——雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、风铃草……再乘上 16 组手绘蜡笔感的配色，共 103 个命名花种，点击时随机抽选。</p>
+  <h3>滚到这里啦</h3>
+  <p>如果你把定位方式切成 <code>page</code>，在这里点下的花会跟着页面一起滚动，像真的开在纸面上；如果切成 <code>screen</code>，花会钉在屏幕的那一点，页面怎么动它都不挪窝。试试就知道。</p>
+  <p>存活时间调成 <code>0</code> 的话，花会一直开着——开满一整页也是被允许的，"落花扫地"按钮随时可以帮你收拾。</p>
+</main>
+
+<footer>繁花 Fanhua · MIT License · 点击即开花 🌸</footer>
+
+<script>
+  const $ = (id) => document.getElementById(id)
+
+  function apply() {
+    const min = parseFloat($('minSize').value) || 40
+    const max = parseFloat($('maxSize').value) || 110
+    Fanhua.setOptions({
+      size: [Math.min(min, max), Math.max(min, max)],
+      position: $('position').value,
+      duration: Math.max(0, parseFloat($('duration').value) || 0),
+    })
+  }
+
+  // 面板本身不触发开花
+  $('panel').addEventListener('click', (e) => e.stopPropagation())
+  $('apply').addEventListener('click', apply)
+  $('random').addEventListener('click', () => {
+    apply()
+    for (let i = 0; i < 10; i++) {
+      setTimeout(() => {
+        Fanhua.bloom(
+          Math.random() * window.innerWidth,
+          window.scrollY + 80 + Math.random() * (window.innerHeight - 160)
+        )
+      }, i * 120)
+    }
+  })
+  $('wipe').addEventListener('click', () => Fanhua.clear())
+
+  Fanhua.init({ size: [40, 110], position: 'page', duration: 3000 })
+</script>
+
+</body>
+</html>

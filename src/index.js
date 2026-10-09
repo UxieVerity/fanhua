@@ -80,6 +80,8 @@ export function bloom(clientX, clientY, overrides = {}) {
   el.className = 'fanhua'
   el.innerHTML = svg
   el.title = variety.name
+  el.style.width = `${size}px`
+  el.style.height = `${size}px`
 
   if (o.position === 'screen') {
     el.style.position = 'fixed'
