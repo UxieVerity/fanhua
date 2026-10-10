@@ -382,10 +382,11 @@ function floodBackground(img, limitAt) {
 //      边缘的抗锯齿交给后面降采样时的面积平均来完成。
 //
 export function keyOutBackground(img, opts = {}) {
-  const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12 } = opts
+  const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12, peelTol = 25, haloFlat = 8 } = opts
   const { width: w, height: h, data } = img
   const strict = estimateBackground(img)
-  const level = localBackground(img, block, pct, strict, flatness(img), flatTol)
+  const flat = flatness(img)
+  const level = localBackground(img, block, pct, strict, flat, flatTol)
   // 生图最外一圈常带一条压暗的渲染伪影（实测 249，背景 254，只差几阶）。
   // 它平坦、贴边、又是洪水填充的起点，卡在 tol 外就会整条留下来 ——
   // 一条 1px 的线会被 alphaBBox 算进包围盒，把花挤小、线贴在贴图边缘。
@@ -394,6 +395,35 @@ export function keyOutBackground(img, opts = {}) {
     const edge = Math.min(x, y, w - 1 - x, h - 1 - y)
     return level[y * w + x] - (edge < border ? borderTol : tol)
   })
+  // 洗残边：贴着花瓣的过渡带像素九成以上是背景（实测 min 245~248、全不透明），
+  // 却因为渐变带亮度非单调（250,244,248,246 再落进花瓣）卡在洪水阈值外 ——
+  // 1024 原图 4 倍降采样能把它稀释掉；512 小图只有 2 倍，深色底上就是一圈白锯齿。
+  //
+  // 从已判定背景再发一场洪水，扩散条件是「平滑且亮度仍接近背景」。
+  // 平滑是关键：花瓣哪怕白到 250 也带着笔触纹理，洪水进不去，
+  // 所以白花瓣内部不会被啃掉；而过渡带是花瓣与平滑背景的混合，
+  // 花瓣占比一低就跟着平滑，正好整条洗掉。连通性仍然兜底：
+  // 被花瓣围住的白色区域从外头走不进去，照样保得住。
+  // 门槛用 haloFlat 而不是 flatTol：网格图的背景自带噪声（实测极差到 6），
+  // 卡在 flatTol=3 会寸步难行；花瓣纹理实测 20 起，8 当中正好是分界。
+  const minAt = (p) => Math.min(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])
+  const stack = []
+  for (let p = 0; p < w * h; p++) if (bg[p]) stack.push(p)
+  while (stack.length) {
+    const p = stack.pop()
+    const x = p % w
+    const y = (p - x) / w
+    const tryPush = (q) => {
+      if (bg[q] || flat[q] > haloFlat) return
+      if (minAt(q) < level[q] - peelTol) return
+      bg[q] = 1
+      stack.push(q)
+    }
+    if (x > 0) tryPush(p - 1)
+    if (x < w - 1) tryPush(p + 1)
+    if (y > 0) tryPush(p - w)
+    if (y < h - 1) tryPush(p + w)
+  }
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
   return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
