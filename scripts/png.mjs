@@ -183,23 +183,171 @@ export function encodePng(rgba, w, h, level = 9) {
 
 // ---------- 图像处理 ----------
 
-// 从四边洪水填充，把「与边框连通的近白像素」判为背景。
-// 用连通性而不是全局阈值：花瓣内部的高光即使接近纯白也不会被抠掉。
-export function keyOutBackground(img, opts = {}) {
-  const { hi = 250, lo = 236 } = opts
+// 估计背景到底有多白：看最外一圈像素的 min 通道，取 90 分位
+// （取分位而不是最大值，花朵万一压到画边也不会把阈值带偏）
+function estimateBackground(img, ring = 3) {
   const { width: w, height: h, data } = img
-  const isWhite = (i) => {
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    return Math.min(r, g, b) >= lo
+  const vals = []
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (x >= ring && x < w - ring && y >= ring && y < h - ring) continue
+      const i = (y * w + x) * 4
+      vals.push(Math.min(data[i], data[i + 1], data[i + 2]))
+    }
   }
+  vals.sort((a, b) => a - b)
+  return vals[Math.floor(vals.length * 0.9)]
+}
+
+// 局部平坦度：3x3 邻域内 min 通道的极差。
+// 这是「背景 / 花瓣」最可靠的分界线 —— 背景是平滑的（实测极差 0~1），
+// 而花瓣哪怕白到 250，也带着笔触纹理（实测极差 20~70）。
+function flatness(img, radius = 1) {
+  const { width: w, height: h, data } = img
+  const mn = new Uint8Array(w * h)
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4
+    mn[p] = Math.min(data[i], data[i + 1], data[i + 2])
+  }
+  const out = new Uint8Array(w * h)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let lo = 255
+      let hi = 0
+      for (let dy = -radius; dy <= radius; dy++) {
+        const yy = y + dy
+        if (yy < 0 || yy >= h) continue
+        for (let dx = -radius; dx <= radius; dx++) {
+          const xx = x + dx
+          if (xx < 0 || xx >= w) continue
+          const v = mn[yy * w + xx]
+          if (v < lo) lo = v
+          if (v > hi) hi = v
+        }
+      }
+      out[y * w + x] = hi - lo
+    }
+  }
+  return out
+}
+
+// 局部背景亮度场：生图的背景并不均匀（实测是 254 往 252 缓变），
+// 用一个全局阈值必然顾此失彼 —— 卡紧了背景残留，卡松了白花瓣被吃。
+// 这里按块统计亮度，插值成逐像素的背景亮度，让阈值贴着背景走。
+//
+// 关键：只有「局部平坦」的像素参与块统计（见 flatness）。
+// 早先直接拿块内全像素取中位数，遇到花瓣又白又大片的图会翻车：
+// 块内花瓣占多数时中位数落在花瓣亮度上（实测某块落在 230），
+// 阈值跟着掉进花瓣区间（226），洪水填充就顺着花瓣边缘一路吃进去，
+// 整片浅色花瓣被啃成透明。筛掉有纹理的像素后，块内只剩下背景那一档；
+// 整块被花盖住的格子一个样本都取不到，正好回退成 NaN 交给邻格补。
+function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
+  const { width: w, height: h, data } = img
+  const gw = Math.ceil(w / block)
+  const gh = Math.ceil(h / block)
+  const field = new Float32Array(gw * gh).fill(NaN)
+
+  for (let by = 0; by < gh; by++) {
+    for (let bx = 0; bx < gw; bx++) {
+      const vals = []
+      for (let y = by * block; y < Math.min(h, (by + 1) * block); y++) {
+        for (let x = bx * block; x < Math.min(w, (bx + 1) * block); x++) {
+          const p = y * w + x
+          if (flat[p] > flatTol) continue
+          const i = p * 4
+          vals.push(Math.min(data[i], data[i + 1], data[i + 2]))
+        }
+      }
+      if (vals.length >= 16) {
+        vals.sort((a, b) => a - b)
+        field[by * gw + bx] = vals[Math.floor(vals.length * pct)]
+      }
+    }
+  }
+
+  // 整块被花朵盖住的格子没有样本，用周围格子补
+  for (let pass = 0; pass < 8; pass++) {
+    let filled = 0
+    for (let by = 0; by < gh; by++) {
+      for (let bx = 0; bx < gw; bx++) {
+        const k = by * gw + bx
+        if (!Number.isNaN(field[k])) continue
+        let sum = 0
+        let n = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const y = by + dy
+            const x = bx + dx
+            if (y < 0 || x < 0 || y >= gh || x >= gw) continue
+            const v = field[y * gw + x]
+            if (!Number.isNaN(v)) { sum += v; n++ }
+          }
+        }
+        if (n) { field[k] = sum / n; filled++ }
+      }
+    }
+    if (!filled) break
+  }
+  for (let k = 0; k < field.length; k++) if (Number.isNaN(field[k])) field[k] = fallback
+
+  // 轻度平滑，避免块与块之间出现台阶
+  const smooth = Float32Array.from(field)
+  for (let by = 0; by < gh; by++) {
+    for (let bx = 0; bx < gw; bx++) {
+      let sum = 0
+      let n = 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const y = by + dy
+          const x = bx + dx
+          if (y < 0 || x < 0 || y >= gh || x >= gw) continue
+          sum += field[y * gw + x]
+          n++
+        }
+      }
+      smooth[by * gw + bx] = sum / n
+    }
+  }
+  return sampleField({ field: smooth, gw, gh, block }, w, h)
+}
+
+// 双线性采样出逐像素的背景亮度
+function sampleField(f, w, h) {
+  const out = new Float32Array(w * h)
+  const { field, gw, gh, block } = f
+  for (let y = 0; y < h; y++) {
+    const fy = Math.min(gh - 1.001, Math.max(0, y / block - 0.5))
+    const y0 = Math.floor(fy)
+    const y1 = Math.min(gh - 1, y0 + 1)
+    const ty = fy - y0
+    for (let x = 0; x < w; x++) {
+      const fx = Math.min(gw - 1.001, Math.max(0, x / block - 0.5))
+      const x0 = Math.floor(fx)
+      const x1 = Math.min(gw - 1, x0 + 1)
+      const tx = fx - x0
+      const a = field[y0 * gw + x0]
+      const b = field[y0 * gw + x1]
+      const c = field[y1 * gw + x0]
+      const d = field[y1 * gw + x1]
+      out[y * w + x] = (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty
+    }
+  }
+  return out
+}
+
+// 从四边洪水填充：与边框连通、且亮度不低于 limitAt(x,y) 的像素判为背景。
+// 用连通性而不是「够白就算背景」，是为了保住花朵内部那些和背景一样白的区域 ——
+// 它们被花瓣围住，从边框走不进去。
+function floodBackground(img, limitAt) {
+  const { width: w, height: h, data } = img
   const bg = new Uint8Array(w * h)
   const stack = []
   const push = (x, y) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return
     const p = y * w + x
-    if (bg[p] || !isWhite(p * 4)) return
+    if (bg[p]) return
+    const i = p * 4
+    if (Math.min(data[i], data[i + 1], data[i + 2]) < limitAt(x, y)) return
     bg[p] = 1
     stack.push(p)
   }
@@ -220,27 +368,54 @@ export function keyOutBackground(img, opts = {}) {
     push(x, y + 1)
     push(x, y - 1)
   }
+  return bg
+}
 
-  // 背景 → 全透明；贴着背景的一圈按「离纯白多远」做柔和过渡，保住抗锯齿边缘
+// 抠掉背景，返回带 alpha 的图。
+//
+// 两个关键点：
+//   1. 阈值贴着局部背景走。白花瓣本身就在 240~253 之间，和背景几乎重叠，
+//      阈值必须贴着背景，否则整圈花瓣会被当成背景吃掉。
+//   2. 只做「是 / 不是背景」的二值判断，不做按「离纯白多远」的渐变过渡。
+//      白花的花瓣和背景一样白，任何固定区间的过渡都会把花瓣一起削成半透明，
+//      在白底上看是发灰，放到深色底上就是一整圈黑边。
+//      边缘的抗锯齿交给后面降采样时的面积平均来完成。
+//
+export function keyOutBackground(img, opts = {}) {
+  const { tol = 4, block = 32, pct = 0.5, flatTol = 3 } = opts
+  const { width: w, height: h, data } = img
+  const strict = estimateBackground(img)
+  const level = localBackground(img, block, pct, strict, flatness(img), flatTol)
+  const bg = floodBackground(img, (x, y) => level[y * w + x] - tol)
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const p = y * w + x
-      if (bg[p]) continue
-      let nearBg = false
-      if (x > 0 && bg[p - 1]) nearBg = true
-      else if (x < w - 1 && bg[p + 1]) nearBg = true
-      else if (y > 0 && bg[p - w]) nearBg = true
-      else if (y < h - 1 && bg[p + w]) nearBg = true
-      if (!nearBg) continue
-      const i = p * 4
-      const min = Math.min(data[i], data[i + 1], data[i + 2])
-      const t = (hi - min) / (hi - lo) // hi(纯白) → 0，lo(实色) → 1
-      alpha[p] = Math.max(0, Math.min(255, Math.round(t * 255)))
+  return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
+}
+
+// 去掉零星的不透明小碎块：抠图时背景里略暗的噪点会被留下，
+// 面积小又跟花朵不连通的，一律当噪点抹掉。
+export function removeSpecks(img, minSize = 64) {
+  const { width: w, height: h, alpha } = img
+  const seen = new Uint8Array(w * h)
+  const stack = []
+  for (let start = 0; start < w * h; start++) {
+    if (seen[start] || alpha[start] === 0) continue
+    const comp = []
+    seen[start] = 1
+    stack.push(start)
+    while (stack.length) {
+      const p = stack.pop()
+      comp.push(p)
+      const x = p % w
+      const y = (p - x) / w
+      if (x > 0 && !seen[p - 1] && alpha[p - 1]) { seen[p - 1] = 1; stack.push(p - 1) }
+      if (x < w - 1 && !seen[p + 1] && alpha[p + 1]) { seen[p + 1] = 1; stack.push(p + 1) }
+      if (y > 0 && !seen[p - w] && alpha[p - w]) { seen[p - w] = 1; stack.push(p - w) }
+      if (y < h - 1 && !seen[p + w] && alpha[p + w]) { seen[p + w] = 1; stack.push(p + w) }
     }
+    if (comp.length < minSize) for (const p of comp) alpha[p] = 0
   }
-  return { width: w, height: h, data, alpha }
+  return img
 }
 
 // 按 alpha 求内容包围盒
@@ -341,7 +516,7 @@ export function paintWhite(img, rect) {
 export function toFlowerSprite(pngBuffer, outSize = 224, pad = 0.06, masks = []) {
   const img = decodePng(pngBuffer)
   for (const rect of masks) paintWhite(img, rect)
-  const keyed = keyOutBackground(img)
+  const keyed = removeSpecks(keyOutBackground(img))
   const box = alphaBBox(keyed)
   if (!box) throw new Error('整张图都是背景，没有可裁的内容')
   return resizeToSquare(keyed, box, outSize, pad)
