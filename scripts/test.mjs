@@ -101,11 +101,51 @@ for (const v of FLOWERS) {
   }
 }
 
+// ---------- WebP 版本 ----------
+// 每张 PNG 都得配一个同名的无损 WebP。主 chunk 必须是 VP8L —— 掉成 VP8/VP8X
+// 就是有损编码了，多半是转码参数被改坏（见 scripts/webp.mjs 文件头的两个坑）。
+
+const FOURCC = (buf) => buf.subarray(12, 16).toString('latin1')
+
+let webpBytes = 0
+let webpSmallest = Infinity
+let webpLargest = 0
+const seenWebp = new Set() // 见过的文件名，用来查孤儿；不合格的也算见过，免得重复报错
+
+for (const v of FLOWERS) {
+  const name = v.file.replace(/\.png$/, '.webp')
+  const path = IMG_DIR + name
+  if (!existsSync(path)) {
+    fail(`缺 WebP: ${name}`)
+    continue
+  }
+  seenWebp.add(name)
+
+  const buf = readFileSync(path)
+  if (buf.subarray(0, 4).toString('latin1') !== 'RIFF' || buf.subarray(8, 12).toString('latin1') !== 'WEBP') {
+    fail(`${name}: 不是 WebP 文件`)
+    continue
+  }
+  const cc = FOURCC(buf)
+  if (cc !== 'VP8L') {
+    fail(`${name}: 不是无损 WebP（主 chunk 是 ${cc}）`)
+    continue
+  }
+  webpBytes += buf.length
+  webpSmallest = Math.min(webpSmallest, buf.length)
+  webpLargest = Math.max(webpLargest, buf.length)
+}
+
 // ---------- 目录与清单对得上 ----------
 
 const onDisk = readdirSync(IMG_DIR).filter((f) => f.endsWith('.png'))
 for (const f of onDisk) if (!files.has(f)) fail(`img/flowers/${f} 不在清单里`)
 for (const f of files) if (!onDisk.includes(f)) fail(`清单里的 ${f} 没有对应文件`)
+
+// 反过来：多出来的 .webp 也得在清单里，别留下改名后没人管的孤儿文件
+for (const f of readdirSync(IMG_DIR).filter((f) => f.endsWith('.webp'))) {
+  if (!seenWebp.has(f)) fail(`img/flowers/${f} 不在清单里`)
+}
 
 const manifest = JSON.parse(readFileSync(IMG_DIR + 'manifest.json', 'utf8'))
 if (manifest.count !== FLOWER_COUNT) fail(`manifest.json 记了 ${manifest.count} 条，清单里是 ${FLOWER_COUNT} 条`)
@@ -124,6 +164,7 @@ if (failed) {
   process.exit(1)
 }
 console.log(
-  `✓ ${FLOWER_COUNT} 个花种全部通过 · ${bySpecies.size} 种花 · ` +
-  `共 ${(totalBytes / 1024 / 1024).toFixed(2)} MB（单张 ${(smallest / 1024).toFixed(1)}~${(largest / 1024).toFixed(1)} KB）`
+  `✓ ${FLOWER_COUNT} 个花种全部通过 · ${bySpecies.size} 种花\n` +
+  `  PNG  ${(totalBytes / 1024 / 1024).toFixed(2)} MB（单张 ${(smallest / 1024).toFixed(1)}~${(largest / 1024).toFixed(1)} KB）\n` +
+  `  WebP ${(webpBytes / 1024 / 1024).toFixed(2)} MB（单张 ${(webpSmallest / 1024).toFixed(1)}~${(webpLargest / 1024).toFixed(1)} KB · 无损）`
 )

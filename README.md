@@ -13,6 +13,7 @@
 - 📐 **大小可定制**：支持区间随机或固定大小，还能随机旋转
 - 📌 **两种定位**：跟随页面滚动，或固定在屏幕上
 - ⏳ **可控存活时间**：到时逐渐淡出，也可以选择永驻
+- 🪶 **WebP + PNG 双版本**：每张图都有一份无损 WebP，比 PNG 小三分之一；浏览器支持就自动用 WebP，不支持静默回退 PNG
 - 📦 **零依赖**：插件本体 ~2KB min+gzip，ESM / CJS / IIFE 三种格式
 
 ## 安装
@@ -27,7 +28,7 @@ npm install fanhua
 <script src="dist/fanhua.iife.js"></script>
 ```
 
-花图在 `img/flowers/` 里，跟着插件一起发布即可。
+花图在 `img/flowers/` 里（每张花各有一份 `.webp` 和一份 `.png`），跟着插件一起发布即可。
 
 ## 快速上手
 
@@ -70,8 +71,9 @@ Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })
 | `imgBase` | `string \| null` | `null` | 图库根路径，`null` = 自动推断 |
 | `preload` | `boolean \| number` | `true` | `true` 空闲时预热全部 100 张；`false` 用到才加载；数字 = 只预热 N 张（随机挑） |
 | `zIndex` | `number` | `2147483647` | 花朵的层叠层级 |
+| `format` | `'auto' \| 'webp' \| 'png'` | `'auto'` | 用哪份图。`auto` 探一次 WebP 支持，支持就用 WebP（省三分之一），否则回退 PNG |
 
-> 100 张图合计约 8 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
+> 100 张图 PNG 合计约 8 MB，WebP 约 5.3 MB。`format: 'auto'` 时浏览器只会下其中一份，所以默认情况下真正传输的是 5.3 MB 那一份。想让首屏更轻，再把 `preload` 设成 `false` 或一个较小的数字。
 
 ### `Fanhua.setOptions(options?)`
 
@@ -117,16 +119,20 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 2. 贴着背景的一圈按"离纯白多远"做柔和过渡，保住抗锯齿边缘
 3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 256px（颜色按预乘 alpha 平均，边缘不出深色描边）
 4. 逐行挑最省的 PNG 滤波方式后 deflate
+5. 再转一份 WebP 无损（`npm run webp`），比 PNG 小三分之一
 
-`npm test` 会逐张复核尺寸、透明底、留白与居中，防止某张图被裁断或没抠干净。
+第 5 步值得说明一下：PNG 内部已经是 deflate，外面再套 gzip / brotli 基本没有收益（实测 −0.0%），真正省体积的是换编码。转码用系统里的 ffmpeg，`scripts/webp.mjs` 里记了两个坑——必须显式 `-pix_fmt bgra`、且不能带 `-preset`，否则 ffmpeg 会悄悄编成有损的 yuva420p，体积看着掉到十分之一，其实色度已经被降采样了。所以转完会验一遍主 chunk 是不是 `VP8L`。
+
+`npm test` 会逐张复核尺寸、透明底、留白与居中，并确认每张 PNG 都配了一个无损 WebP，防止某张图被裁断、没抠干净，或者哪天被转成有损还没人发现。
 
 ## 本地开发
 
 ```bash
 npm install
 npm run build   # 打包 dist/
-npm test        # 图库自检：100 张、透明底、居中不裁断
+npm test        # 图库自检：100 张、透明底、居中不裁断、WebP 无损
 npm run serve   # 启动 demo：http://localhost:4173
+npm run webp    # 由 img/flowers/*.png 重新生成无损 WebP（需要 ffmpeg）
 ```
 
 打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部 100 张的花谱。

@@ -17,7 +17,8 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node scripts/test.mjs",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "webp": "node scripts/webp.mjs"
   },
   "keywords": [
     "click",
