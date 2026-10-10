@@ -1,8 +1,8 @@
 // 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
-// 图片在 img/flowers/ 下，共 100 张，192x192 透明底 PNG。
+// 图片在 img/flowers/ 下，共 100 张，256x256 透明底 PNG。
 // 命名规则：编号-花名-颜色.png，同一种花有多种颜色。
 
-export const SPRITE_SIZE = 192
+export const SPRITE_SIZE = 256
 
 export const FLOWERS = [
   { id: '001', name: '雏菊·白', species: '雏菊', file: '001-daisy-白.png' },

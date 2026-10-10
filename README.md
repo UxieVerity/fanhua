@@ -71,7 +71,7 @@ Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })
 | `preload` | `boolean \| number` | `true` | `true` 空闲时预热全部 100 张；`false` 用到才加载；数字 = 只预热 N 张（随机挑） |
 | `zIndex` | `number` | `2147483647` | 花朵的层叠层级 |
 
-> 100 张图合计约 4 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
+> 100 张图合计约 8 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
 
 ### `Fanhua.setOptions(options?)`
 
@@ -115,7 +115,7 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 
 1. 关掉水印出图，白底近白像素从四边洪水填充判为背景——用连通性而不是全局阈值，花瓣内部的高光才不会被一起抠掉
 2. 贴着背景的一圈按"离纯白多远"做柔和过渡，保住抗锯齿边缘
-3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 192px（颜色按预乘 alpha 平均，边缘不出深色描边）
+3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 256px（颜色按预乘 alpha 平均，边缘不出深色描边）
 4. 逐行挑最省的 PNG 滤波方式后 deflate
 
 `npm test` 会逐张复核尺寸、透明底、留白与居中，防止某张图被裁断或没抠干净。
