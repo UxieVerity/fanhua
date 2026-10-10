@@ -382,11 +382,18 @@ function floodBackground(img, limitAt) {
 //      边缘的抗锯齿交给后面降采样时的面积平均来完成。
 //
 export function keyOutBackground(img, opts = {}) {
-  const { tol = 4, block = 32, pct = 0.5, flatTol = 3 } = opts
+  const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12 } = opts
   const { width: w, height: h, data } = img
   const strict = estimateBackground(img)
   const level = localBackground(img, block, pct, strict, flatness(img), flatTol)
-  const bg = floodBackground(img, (x, y) => level[y * w + x] - tol)
+  // 生图最外一圈常带一条压暗的渲染伪影（实测 249，背景 254，只差几阶）。
+  // 它平坦、贴边、又是洪水填充的起点，卡在 tol 外就会整条留下来 ——
+  // 一条 1px 的线会被 alphaBBox 算进包围盒，把花挤小、线贴在贴图边缘。
+  // 所以最外 border 像素单独放宽到 borderTol：花是居中拍的，那里只可能是背景。
+  const bg = floodBackground(img, (x, y) => {
+    const edge = Math.min(x, y, w - 1 - x, h - 1 - y)
+    return level[y * w + x] - (edge < border ? borderTol : tol)
+  })
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
   return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
