@@ -1,7 +1,6 @@
 // 繁花 fanhua —— 点击页面，在手绘花海里绽放
 // 零依赖的原生 JS 插件：每次点击处随机绽放一朵花。
-// 花来自 img/flowers/ 里的 100 张透明底贴图（见 src/flowers.js 清单），
-// 每张都有 WebP 与 PNG 两个版本，运行时按浏览器支持挑一个。
+// 花来自 img/flowers/ 里的 100 张透明底无损 WebP（见 src/flowers.js 清单）。
 
 import { FLOWERS, FLOWER_COUNT, pickFlower } from './flowers.js'
 
@@ -13,7 +12,6 @@ const DEFAULTS = {
   imgBase: null,      // 图库根路径；null = 自动推断（见 resolveBase）
   preload: true,      // true 全部预热 | false 用到才加载 | 数字 = 只预热 N 张
   rotate: 12,         // 随机旋转角度上限（度），0 = 不旋转
-  format: 'auto',     // 'auto' 按浏览器支持选 WebP/PNG | 'webp' | 'png'
 }
 
 let opts = { ...DEFAULTS }
@@ -26,30 +24,7 @@ const SELF_SRC =
 
 // ---------- 图库 ----------
 
-const cache = new Map() // 最终文件名 -> HTMLImageElement
-
-// WebP 支持与否只探一次。1x1 的画布就够 —— 不支持时 toDataURL 会退回 image/png。
-let webpOk = null
-
-function supportsWebp() {
-  if (webpOk === null) {
-    try {
-      const c = document.createElement('canvas')
-      c.width = c.height = 1
-      webpOk = c.toDataURL('image/webp').indexOf('data:image/webp') === 0
-    } catch {
-      webpOk = false
-    }
-  }
-  return webpOk
-}
-
-// 清单里记的都是 .png，真正请求哪个扩展名在这里定
-function fileName(variety) {
-  if (opts.format === 'png') return variety.file
-  if (opts.format === 'webp') return variety.file.replace(/\.png$/, '.webp')
-  return variety.file.replace(/\.png$/, supportsWebp() ? '.webp' : '.png')
-}
+const cache = new Map() // file -> HTMLImageElement
 
 function resolveBase() {
   if (opts.imgBase) return opts.imgBase
@@ -67,13 +42,12 @@ function resolveBase() {
 
 // 取一张花的 <img>，同一张图只请求一次
 function imageFor(variety) {
-  const file = fileName(variety)
-  let img = cache.get(file)
+  let img = cache.get(variety.file)
   if (!img) {
     img = new Image()
     img.decoding = 'async'
-    img.src = resolveBase() + file
-    cache.set(file, img)
+    img.src = resolveBase() + variety.file
+    cache.set(variety.file, img)
   }
   return img
 }

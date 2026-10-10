@@ -442,6 +442,39 @@ export function alphaBBox(img, threshold = 8) {
   return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
 }
 
+// 成品体检：透明底、没被裁断、居中。有问题返回一句人话，没问题返回 null。
+//
+// 这一关只能在这里做。发布出去的贴图只有 WebP，而本项目零依赖、没有 WebP 解码器，
+// 到了 img/flowers/ 那边就再也看不到像素了 —— 所以几何检查必须留在
+// 还能拿到 RGBA 的生成管线里，而不是事后对着成品做。
+export function auditSprite(img, size, opts = {}) {
+  const { minCoverage = 0.15, maxCoverage = 0.95, minMargin = 2, maxOffset = 0.08 } = opts
+  const { width: w, height: h, data } = img
+
+  const alpha = new Uint8Array(w * h)
+  for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3]
+
+  const box = alphaBBox({ width: w, height: h, alpha })
+  if (!box) return '整张图都是透明的'
+
+  const coverage = (box.width * box.height) / (size * size)
+  if (coverage < minCoverage) return `内容太小（占画面 ${(coverage * 100).toFixed(0)}%）`
+  if (coverage > maxCoverage) {
+    return `内容几乎铺满，可能没抠干净背景（占 ${(coverage * 100).toFixed(0)}%）`
+  }
+
+  const margin = Math.min(box.x, box.y, size - (box.x + box.width), size - (box.y + box.height))
+  if (margin < minMargin) return `内容贴边（最小留白 ${margin}px），可能被裁断`
+
+  const dx = Math.abs(box.x + box.width / 2 - size / 2)
+  const dy = Math.abs(box.y + box.height / 2 - size / 2)
+  if (dx > size * maxOffset || dy > size * maxOffset) {
+    return `内容偏出中心 (${dx.toFixed(0)}, ${dy.toFixed(0)})px`
+  }
+
+  return null
+}
+
 // 面积平均重采样（先水平后垂直）。颜色按预乘 alpha 平均，避免边缘出现深色描边。
 export function resizeToSquare(img, box, outSize, pad = 0.06) {
   const { width: w, data, alpha } = img

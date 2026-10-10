@@ -2,7 +2,7 @@
 
 > 每一次点击，都在指尖开出一朵手绘小花。
 
-繁花是一个零依赖的原生 JS 插件：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **100 张透明底贴图**——25 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
+繁花是一个零依赖的原生 JS 插件：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **100 张透明底无损 WebP 贴图**——25 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
 
 ![demo](demo/demo.png)
 
@@ -13,7 +13,7 @@
 - 📐 **大小可定制**：支持区间随机或固定大小，还能随机旋转
 - 📌 **两种定位**：跟随页面滚动，或固定在屏幕上
 - ⏳ **可控存活时间**：到时逐渐淡出，也可以选择永驻
-- 🪶 **WebP + PNG 双版本**：每张图都有一份无损 WebP，比 PNG 小三分之一；浏览器支持就自动用 WebP，不支持静默回退 PNG
+- 🪶 **只发无损 WebP**：比同画质的 PNG 小三分之一，而且逐像素无损；100 张合计 5.3 MB
 - 📦 **零依赖**：插件本体 ~2KB min+gzip，ESM / CJS / IIFE 三种格式
 
 ## 安装
@@ -28,7 +28,9 @@ npm install fanhua
 <script src="dist/fanhua.iife.js"></script>
 ```
 
-花图在 `img/flowers/` 里（每张花各有一份 `.webp` 和一份 `.png`），跟着插件一起发布即可。
+花图在 `img/flowers/` 里，跟着插件一起发布即可。
+
+> **浏览器要求**：贴图是无损 WebP，需要浏览器支持 WebP。Chrome 32+ / Firefox 65+ / Safari 14+ / Edge 18+ 都没问题，覆盖率 97% 以上；IE、Safari 13 及更早、以及部分老 Android WebView 开不出花（不报错，只是点了没反应）。如果要覆盖这些环境，自己把 `img/flowers/` 换成 PNG 并把 `src/flowers.js` 里的 `file` 后缀改成 `.png` 即可，插件不关心扩展名。
 
 ## 快速上手
 
@@ -71,9 +73,8 @@ Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })
 | `imgBase` | `string \| null` | `null` | 图库根路径，`null` = 自动推断 |
 | `preload` | `boolean \| number` | `true` | `true` 空闲时预热全部 100 张；`false` 用到才加载；数字 = 只预热 N 张（随机挑） |
 | `zIndex` | `number` | `2147483647` | 花朵的层叠层级 |
-| `format` | `'auto' \| 'webp' \| 'png'` | `'auto'` | 用哪份图。`auto` 探一次 WebP 支持，支持就用 WebP（省三分之一），否则回退 PNG |
 
-> 100 张图 PNG 合计约 8 MB，WebP 约 5.3 MB。`format: 'auto'` 时浏览器只会下其中一份，所以默认情况下真正传输的是 5.3 MB 那一份。想让首屏更轻，再把 `preload` 设成 `false` 或一个较小的数字。
+> 100 张图合计约 5.3 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
 
 ### `Fanhua.setOptions(options?)`
 
@@ -118,21 +119,45 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 1. 关掉水印出图，白底近白像素从四边洪水填充判为背景——用连通性而不是全局阈值，花瓣内部的高光才不会被一起抠掉
 2. 贴着背景的一圈按"离纯白多远"做柔和过渡，保住抗锯齿边缘
 3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 256px（颜色按预乘 alpha 平均，边缘不出深色描边）
-4. 逐行挑最省的 PNG 滤波方式后 deflate
-5. 再转一份 WebP 无损（`npm run webp`），比 PNG 小三分之一
+4. 逐行挑最省的 PNG 滤波方式后 deflate，落到 `txt2img/sprites/`
+5. 转成无损 WebP 落到 `img/flowers/`，中间那批 PNG 到此为止，不跟着发布
 
-第 5 步值得说明一下：PNG 内部已经是 deflate，外面再套 gzip / brotli 基本没有收益（实测 −0.0%），真正省体积的是换编码。转码用系统里的 ffmpeg，`scripts/webp.mjs` 里记了两个坑——必须显式 `-pix_fmt bgra`、且不能带 `-preset`，否则 ffmpeg 会悄悄编成有损的 yuva420p，体积看着掉到十分之一，其实色度已经被降采样了。所以转完会验一遍主 chunk 是不是 `VP8L`。
+第 5 步值得说明一下：PNG 内部已经是 deflate，外面再套 gzip / brotli 基本没有收益（实测 −0.0%），真正省体积的是换编码——同一批图 7.85 MB → 5.33 MB（−32%），且逐像素无损。转码用系统里的 ffmpeg，`scripts/webp.mjs` 里记了两个坑：必须显式 `-pix_fmt bgra`、且不能带 `-preset`，否则 ffmpeg 会悄悄编成有损的 yuva420p，体积看着掉到十分之一，其实色度已经被 4:2:0 降采样了。所以转完会验一遍主 chunk 是不是 `VP8L`。
 
-`npm test` 会逐张复核尺寸、透明底、留白与居中，并确认每张 PNG 都配了一个无损 WebP，防止某张图被裁断、没抠干净，或者哪天被转成有损还没人发现。
+### 为什么中间还要留一批 PNG
+
+因为**发布出去的 WebP 本项目解不开**。插件零依赖，没有 WebP 解码器，一旦贴图变成 `.webp`，"花有没有被裁断、背景抠干净没"这类需要看像素的检查就再也做不了。所以几何体检放在生成那一步（`scripts/png.mjs` 的 `auditSprite`），趁 PNG 还在手上做完；`npm test` 只负责清单自洽与文件结构——数量、命名、尺寸（从 VP8L 头里读）、以及编码方式是不是无损。
 
 ## 本地开发
 
 ```bash
 npm install
 npm run build   # 打包 dist/
-npm test        # 图库自检：100 张、透明底、居中不裁断、WebP 无损
+npm test        # 图库自检：100 张、清单自洽、每张都是尺寸正确的无损 WebP
 npm run serve   # 启动 demo：http://localhost:4173
-npm run webp    # 由 img/flowers/*.png 重新生成无损 WebP（需要 ffmpeg）
+```
+
+生图管线在 `txt2img/` 下，不进版本库（含 API key）。重跑贴图要装 ffmpeg：
+
+```bash
+node txt2img/generate.mjs --from-raw   # 拿 txt2img/raw/ 重跑处理管线，不重新生图
+node scripts/webp.mjs --verify         # 只重转 WebP，并逐像素对一遍中间 PNG
+```
+
+## 本地开发
+
+```bash
+npm install
+npm run build   # 打包 dist/
+npm test        # 图库自检：100 张、清单自洽、每张都是尺寸正确的无损 WebP
+npm run serve   # 启动 demo：http://localhost:4173
+```
+
+生图管线在 `txt2img/` 下，不进版本库（含 API key）。重跑贴图要装 ffmpeg：
+
+```bash
+node txt2img/generate.mjs --from-raw   # 拿 txt2img/raw/ 重跑处理管线，不重新生图
+node scripts/webp.mjs --verify         # 只重转 WebP，并逐像素对一遍中间 PNG
 ```
 
 打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部 100 张的花谱。
