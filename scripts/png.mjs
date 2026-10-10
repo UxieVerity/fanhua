@@ -552,9 +552,20 @@ export function paintWhite(img, rect) {
   }
 }
 
+// 裁出 img 的一个矩形子区。网格生图就是靠它切成单朵小图。
+export function crop(img, x, y, w, h) {
+  const out = new Uint8Array(w * h * 4)
+  for (let r = 0; r < h; r++) {
+    const s = ((y + r) * img.width + x) * 4
+    out.set(img.data.subarray(s, s + w * 4), r * w * 4)
+  }
+  return { width: w, height: h, data: out }
+}
+
 // 一步到位：擦水印 → 去白底 → 裁到内容 → 居中留白 → 缩放到 outSize 的 RGBA
-export function toFlowerSprite(pngBuffer, outSize = 224, pad = 0.06, masks = []) {
-  const img = decodePng(pngBuffer)
+// 入参既可以是 PNG Buffer（内部解码），也可以是 decodePng/crop 的产物（直接处理）
+export function toFlowerSprite(png, outSize = 224, pad = 0.06, masks = []) {
+  const img = png instanceof Uint8Array ? decodePng(png) : png
   for (const rect of masks) paintWhite(img, rect)
   const keyed = removeSpecks(keyOutBackground(img))
   const box = alphaBBox(keyed)
