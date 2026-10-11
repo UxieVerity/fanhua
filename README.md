@@ -4,7 +4,7 @@
 
 繁花是一个零依赖的 TypeScript 插件（发布产物是原生 JS）：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **200 张透明底无损 WebP 贴图**——50 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
 
-🌼 **[在线试玩 →](https://uxieverity.github.io/fanhua/)**（GitHub Pages 上的可交互 demo）
+🌼 **[在线试玩 →](https://www.kuangyaxing.com/fanhua/)**（可交互 demo，部署在作者自己的主机上）
 
 ![demo](https://raw.githubusercontent.com/UxieVerity/fanhua/main/demo/demo.png)
 
