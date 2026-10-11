@@ -1,6 +1,6 @@
 {
   "name": "fanhua",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "繁花 — 点击页面绽放手绘小花的零依赖 JS 插件，内置 200 张花朵贴图。Every click blooms a hand-drawn flower.",
   "main": "dist/fanhua.js",
   "module": "dist/fanhua.mjs",
