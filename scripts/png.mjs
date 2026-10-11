@@ -280,6 +280,13 @@ export function flatness(img, radius = 1) {
 // 阈值跟着掉进花瓣区间（226），洪水填充就顺着花瓣边缘一路吃进去，
 // 整片浅色花瓣被啃成透明。筛掉有纹理的像素后，块内只剩下背景那一档；
 // 整块被花盖住的格子一个样本都取不到，正好回退成 NaN 交给邻格补。
+//
+// 还要「亮度贴着背景」（不低于 fallback-24）才有投票权。平坦只是
+// 必要条件：黑底图反色成白底后，内层浅花瓣反成暗色但依然平滑，
+// 平坦度筛不掉它们 —— 不设亮度窗的话，花内部格子的背景亮度被拖到
+// 花瓣档（实测 240 掉到 10），洪水从瓣间缝隙钻进来把花芯整个吃掉。
+// 白底老图里背景与白花瓣同亮，这个窗只会把偶然平滑的暗笔触挡在外面，
+// 只紧不松。
 function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
   const { width: w, height: h, data } = img
   const gw = Math.ceil(w / block)
@@ -294,7 +301,9 @@ function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
           const p = y * w + x
           if (flat[p] > flatTol) continue
           const i = p * 4
-          vals.push(Math.min(data[i], data[i + 1], data[i + 2]))
+          const v = Math.min(data[i], data[i + 1], data[i + 2])
+          if (v < fallback - 24) continue
+          vals.push(v)
         }
       }
       if (vals.length >= 16) {
@@ -734,10 +743,13 @@ export function crop(img, x, y, w, h) {
 export function toFlowerSprite(png, outSize = 224, pad = 0.06, masks = []) {
   const img = png instanceof Uint8Array ? decodePng(png) : png
   // 黑底图先归一成白底，再擦水印 —— paintWhite 涂的是白，黑底上涂白只会
-  // 留下一块亮斑；归一化之后白斑才跟背景连成一片，被洪水一起吃掉
-  normalizeBackground(img)
+  // 留下一块亮斑；归一化之后白斑才跟背景连成一片，被洪水一起吃掉。
+  // 这里反了色就要记下来，抠完反回去：keyOutBackground 里的归一化因为
+  // 背景已经是白的不会触发，花的颜色不能留在这里反着。
+  const flipped = normalizeBackground(img)
   for (const rect of masks) paintWhite(img, rect)
   const keyed = removeSpecks(keyOutBackground(img))
+  if (flipped) invertRgb(img)
   const box = alphaBBox(keyed)
   if (!box) throw new Error('整张图都是背景，没有可裁的内容')
   return resizeToSquare(keyed, box, outSize, pad)
