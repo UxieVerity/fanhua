@@ -1,6 +1,7 @@
 node_modules/
 dist/
 site/
+deploy-site/
 .DS_Store
 *.log
 
