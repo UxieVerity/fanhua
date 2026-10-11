@@ -1,9 +1,9 @@
 // 体检：把 txt2img/sprites/ 的精灵图铺在深色底上拼成对照图，并统计异常
-//   node txt2img/check.mjs             # 全部
-//   node txt2img/check.mjs 001 022     # 只看几张
+//   node txt2img/check.ts             # 全部
+//   node txt2img/check.ts 001 022     # 只看几张
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { decodePng, encodePng } from '../scripts/png.mjs'
+import { decodePng, encodePng } from '../scripts/png.ts'
 
 const DIR = fileURLToPath(new URL('./sprites/', import.meta.url))
 const only = process.argv.slice(2)
@@ -26,7 +26,17 @@ for (let i = 0; i < W * H; i++) {
   canvas[i * 4 + 3] = 255
 }
 
-const report = []
+interface Row {
+  file: string
+  opaque: number
+  borderOpaque: number
+  comps: number
+  largest: number
+  stray: number
+  holes: string
+}
+
+const report: Row[] = []
 for (let n = 0; n < files.length; n++) {
   const file = files[n]
   const img = decodePng(readFileSync(DIR + file))
@@ -54,7 +64,7 @@ for (let n = 0; n < files.length; n++) {
     const stack = [s]
     seen[s] = 1
     while (stack.length) {
-      const p = stack.pop()
+      const p = stack.pop()!
       size++
       const x = p % w
       const y = (p - x) / w
@@ -75,8 +85,8 @@ for (let n = 0; n < files.length; n++) {
 
   // 被花瓣完全围住的透明洞（从画布外圈走不进去的透明区域）
   const bgSeen = new Uint8Array(w * h)
-  const stack = []
-  const push = (x, y) => {
+  const stack: number[] = []
+  const push = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return
     const p = y * w + x
     if (bgSeen[p] || data[p * 4 + 3] > 8) return
@@ -86,7 +96,7 @@ for (let n = 0; n < files.length; n++) {
   for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1) }
   for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y) }
   while (stack.length) {
-    const p = stack.pop()
+    const p = stack.pop()!
     const x = p % w
     const y = (p - x) / w
     push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1)

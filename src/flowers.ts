@@ -1,10 +1,21 @@
-// 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
+// 花朵图库清单 —— 由 txt2img/generate.ts 生成，不要手改。
 // 贴图在 img/flowers/ 下，共 200 张，256x256 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
+export interface Flower {
+  /** 编号，如 '001' */
+  id: string
+  /** 花名·颜色，如 '雏菊·白' */
+  name: string
+  /** 花种名，如 '雏菊' */
+  species: string
+  /** 贴图文件名（相对图库根） */
+  file: string
+}
+
 export const SPRITE_SIZE = 256
 
-export const FLOWERS = [
+export const FLOWERS: Flower[] = [
   { id: '001', name: '雏菊·白', species: '雏菊', file: '001-daisy-白.webp' },
   { id: '002', name: '雏菊·淡粉', species: '雏菊', file: '002-daisy-淡粉.webp' },
   { id: '003', name: '雏菊·淡黄', species: '雏菊', file: '003-daisy-淡黄.webp' },
@@ -207,9 +218,9 @@ export const FLOWERS = [
   { id: '200', name: '金盏菊·金橙', species: '金盏菊', file: '200-calendula-金橙.webp' },
 ]
 
-export const FLOWER_COUNT = FLOWERS.length
+export const FLOWER_COUNT: number = FLOWERS.length
 
 // 随机抽一朵；传入 rand 可换成自己的随机源（便于测试复现）
-export function pickFlower(rand = Math.random) {
+export function pickFlower(rand: () => number = Math.random): Flower {
   return FLOWERS[Math.min(FLOWER_COUNT - 1, Math.floor(rand() * FLOWER_COUNT))]
 }

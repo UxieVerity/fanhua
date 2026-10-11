@@ -3,6 +3,57 @@
 // 编码：8bit RGBA，逐行自适应滤波 + deflate
 import { inflateSync, deflateSync } from 'node:zlib'
 
+export interface RgbaImage {
+  width: number
+  height: number
+  data: Uint8Array
+}
+
+export interface AlphaImage {
+  width: number
+  height: number
+  alpha: Uint8Array
+}
+
+export interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface KeyOutOptions {
+  tol?: number
+  block?: number
+  pct?: number
+  flatTol?: number
+  border?: number
+  borderTol?: number
+  peelTol?: number
+  haloFlat?: number
+  /** 传入对象则把中间结果挂上去，供调试 */
+  debug?: Record<string, unknown> | null
+}
+
+export interface KeyOutResult extends RgbaImage, AlphaImage {
+  bgLevel: number
+  threshold: number
+}
+
+export interface AuditOptions {
+  minCoverage?: number
+  maxCoverage?: number
+  minMargin?: number
+  maxOffset?: number
+}
+
 // ---------- CRC32 ----------
 
 const CRC_TABLE = (() => {
@@ -15,7 +66,7 @@ const CRC_TABLE = (() => {
   return t
 })()
 
-function crc32(buf) {
+function crc32(buf: Uint8Array) {
   let c = -1
   for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8)
   return (c ^ -1) >>> 0
@@ -23,9 +74,9 @@ function crc32(buf) {
 
 // ---------- 解码 ----------
 
-const CHANNELS = { 0: 1, 2: 3, 4: 2, 6: 4 }
+const CHANNELS: Record<number, number> = { 0: 1, 2: 3, 4: 2, 6: 4 }
 
-function paeth(a, b, c) {
+function paeth(a: number, b: number, c: number) {
   const p = a + b - c
   const pa = Math.abs(p - a)
   const pb = Math.abs(p - b)
@@ -34,11 +85,11 @@ function paeth(a, b, c) {
 }
 
 // 读 PNG → { width, height, data: RGBA Uint8Array }
-export function decodePng(buf) {
+export function decodePng(buf: Buffer): RgbaImage {
   if (buf.readUInt32BE(0) !== 0x89504e47) throw new Error('不是 PNG')
   let off = 8
-  let ihdr = null
-  const idat = []
+  let ihdr: { width: number; height: number; depth: number; colorType: number; interlace: number } | null = null
+  const idat: Buffer[] = []
   while (off < buf.length) {
     const len = buf.readUInt32BE(off)
     const type = buf.toString('ascii', off + 4, off + 8)
@@ -116,7 +167,7 @@ export function decodePng(buf) {
 
 // ---------- 编码 ----------
 
-function chunk(type, body) {
+function chunk(type: string, body: Buffer) {
   const head = Buffer.alloc(8)
   head.writeUInt32BE(body.length, 0)
   head.write(type, 4, 'ascii')
@@ -126,7 +177,7 @@ function chunk(type, body) {
 }
 
 // 逐行挑最省的滤波方式（最小绝对差启发式），比固定 None 小 30%~50%
-function filterScanlines(rgba, w, h) {
+function filterScanlines(rgba: Uint8Array, w: number, h: number) {
   const bpp = 4
   const stride = w * bpp
   const out = Buffer.alloc((stride + 1) * h)
@@ -166,13 +217,13 @@ function filterScanlines(rgba, w, h) {
 }
 
 // RGBA Uint8Array → PNG Buffer
-export function encodePng(rgba, w, h, level = 9) {
+export function encodePng(rgba: Uint8Array, w: number, h: number, level = 9) {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(w, 0)
   ihdr.writeUInt32BE(h, 4)
   ihdr[8] = 8   // bit depth
   ihdr[9] = 6   // RGBA
-  const filtered = filterScanlines(Buffer.from(rgba.buffer, rgba.byteOffset, rgba.length), w, h)
+  const filtered = filterScanlines(Buffer.from(rgba.buffer as ArrayBuffer, rgba.byteOffset, rgba.length), w, h)
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
@@ -190,9 +241,9 @@ export function encodePng(rgba, w, h, level = 9) {
 // max-min，都不随反色变；黑背景反完就是亮的平滑背景，深色描边反完
 // 就是浅色描边，洪水「亮度贴着背景」的方向刚好对调。
 // 返回是否做了反色。白底图（外圈亮度中位数高）原样通过，老图不受影响。
-export function normalizeBackground(img) {
+export function normalizeBackground(img: RgbaImage) {
   const { width: w, height: h, data } = img
-  const vals = []
+  const vals: number[] = []
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (x >= 3 && x < w - 3 && y >= 3 && y < h - 3) continue
@@ -212,7 +263,7 @@ export function normalizeBackground(img) {
 }
 
 // 反转整张图的 RGB（不动 alpha）。normalizeBackground 的逆操作。
-function invertRgb(img) {
+function invertRgb(img: RgbaImage) {
   const { data } = img
   for (let p = 0; p < img.width * img.height; p++) {
     const i = p * 4
@@ -224,9 +275,9 @@ function invertRgb(img) {
 
 // 估计背景到底有多白：看最外一圈像素的 min 通道，取 90 分位
 // （取分位而不是最大值，花朵万一压到画边也不会把阈值带偏）
-function estimateBackground(img, ring = 3) {
+function estimateBackground(img: RgbaImage, ring = 3) {
   const { width: w, height: h, data } = img
-  const vals = []
+  const vals: number[] = []
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (x >= ring && x < w - ring && y >= ring && y < h - ring) continue
@@ -241,7 +292,7 @@ function estimateBackground(img, ring = 3) {
 // 局部平坦度：3x3 邻域内 min 通道的极差。
 // 这是「背景 / 花瓣」最可靠的分界线 —— 背景是平滑的（实测极差 0~1），
 // 而花瓣哪怕白到 250，也带着笔触纹理（实测极差 20~70）。
-export function flatness(img, radius = 1) {
+export function flatness(img: RgbaImage, radius = 1) {
   const { width: w, height: h, data } = img
   const mn = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) {
@@ -287,7 +338,7 @@ export function flatness(img, radius = 1) {
 // 花瓣档（实测 240 掉到 10），洪水从瓣间缝隙钻进来把花芯整个吃掉。
 // 白底老图里背景与白花瓣同亮，这个窗只会把偶然平滑的暗笔触挡在外面，
 // 只紧不松。
-function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
+function localBackground(img: RgbaImage, block: number, pct: number, fallback: number, flat: Uint8Array, flatTol = 3) {
   const { width: w, height: h, data } = img
   const gw = Math.ceil(w / block)
   const gh = Math.ceil(h / block)
@@ -295,7 +346,7 @@ function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
 
   for (let by = 0; by < gh; by++) {
     for (let bx = 0; bx < gw; bx++) {
-      const vals = []
+      const vals: number[] = []
       for (let y = by * block; y < Math.min(h, (by + 1) * block); y++) {
         for (let x = bx * block; x < Math.min(w, (bx + 1) * block); x++) {
           const p = y * w + x
@@ -360,7 +411,7 @@ function localBackground(img, block, pct, fallback, flat, flatTol = 3) {
 }
 
 // 双线性采样出逐像素的背景亮度
-function sampleField(f, w, h) {
+function sampleField(f: { field: Float32Array; gw: number; gh: number; block: number }, w: number, h: number) {
   const out = new Float32Array(w * h)
   const { field, gw, gh, block } = f
   for (let y = 0; y < h; y++) {
@@ -386,11 +437,11 @@ function sampleField(f, w, h) {
 // 从四边洪水填充：与边框连通、且亮度不低于 limitAt(x,y) 的像素判为背景。
 // 用连通性而不是「够白就算背景」，是为了保住花朵内部那些和背景一样白的区域 ——
 // 它们被花瓣围住，从边框走不进去。
-function floodBackground(img, limitAt) {
+function floodBackground(img: RgbaImage, limitAt: (x: number, y: number) => number) {
   const { width: w, height: h, data } = img
   const bg = new Uint8Array(w * h)
-  const stack = []
-  const push = (x, y) => {
+  const stack: number[] = []
+  const push = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return
     const p = y * w + x
     if (bg[p]) return
@@ -408,7 +459,7 @@ function floodBackground(img, limitAt) {
     push(w - 1, y)
   }
   while (stack.length) {
-    const p = stack.pop()
+    const p = stack.pop()!
     const x = p % w
     const y = (p - x) / w
     push(x + 1, y)
@@ -429,7 +480,7 @@ function floodBackground(img, limitAt) {
 //      在白底上看是发灰，放到深色底上就是一整圈黑边。
 //      边缘的抗锯齿交给后面降采样时的面积平均来完成。
 //
-export function keyOutBackground(img, opts = {}) {
+export function keyOutBackground(img: RgbaImage, opts: KeyOutOptions = {}): KeyOutResult {
   const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12, peelTol = 25, haloFlat = 8 } = opts
   const debug = opts.debug || null
   const { width: w, height: h, data } = img
@@ -465,14 +516,14 @@ export function keyOutBackground(img, opts = {}) {
   // 被花瓣围住的白色区域从外头走不进去，照样保得住。
   // 门槛用 haloFlat 而不是 flatTol：网格图的背景自带噪声（实测极差到 6），
   // 卡在 flatTol=3 会寸步难行；花瓣纹理实测 20 起，8 当中正好是分界。
-  const minAt = (p) => Math.min(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])
-  const stack = []
+  const minAt = (p: number) => Math.min(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])
+  const stack: number[] = []
   for (let p = 0; p < w * h; p++) if (bg[p]) stack.push(p)
   while (stack.length) {
-    const p = stack.pop()
+    const p = stack.pop()!
     const x = p % w
     const y = (p - x) / w
-    const tryPush = (q) => {
+    const tryPush = (q: number) => {
       if (bg[q] || flat[q] > haloFlat) return
       if (minAt(q) < level[q] - peelTol) return
       bg[q] = 1
@@ -492,13 +543,13 @@ export function keyOutBackground(img, opts = {}) {
   // 退回；腐蚀完了的才是缝里夹着的薄层背景，收下。彩色花瓣不亮，洪水
   // 碰不到；白花瓣连着自己的深灰描边，膨胀后量得出真实厚度，也保得住。
   const reached = new Uint8Array(w * h)
-  const queue = []
+  const queue: number[] = []
   for (let p = 0; p < w * h; p++) if (bg[p]) queue.push(p)
   while (queue.length) {
-    const p = queue.pop()
+    const p = queue.pop()!
     const x = p % w
     const y = (p - x) / w
-    const tryPush = (q) => {
+    const tryPush = (q: number) => {
       if (bg[q] || reached[q]) return
       if (minAt(q) < level[q] - peelTol) return
       reached[q] = 1
@@ -565,7 +616,7 @@ export function keyOutBackground(img, opts = {}) {
   const keep = new Uint8Array(ncomp + 1)
   for (let c = 1; c <= ncomp; c++) {
     const wall = grayWall[c] + satWall[c]
-    keep[c] = wall > 0 && grayWall[c] * 5 >= wall * 3
+    keep[c] = wall > 0 && grayWall[c] * 5 >= wall * 3 ? 1 : 0
   }
   for (let p = 0; p < w * h; p++) if (reached[p] && !keep[comp[p]]) bg[p] = 1
   const alpha = new Uint8Array(w * h)
@@ -577,17 +628,17 @@ export function keyOutBackground(img, opts = {}) {
 
 // 去掉零星的不透明小碎块：抠图时背景里略暗的噪点会被留下，
 // 面积小又跟花朵不连通的，一律当噪点抹掉。
-export function removeSpecks(img, minSize = 64) {
+export function removeSpecks<T extends AlphaImage>(img: T, minSize = 64): T {
   const { width: w, height: h, alpha } = img
   const seen = new Uint8Array(w * h)
-  const stack = []
+  const stack: number[] = []
   for (let start = 0; start < w * h; start++) {
     if (seen[start] || alpha[start] === 0) continue
-    const comp = []
+    const comp: number[] = []
     seen[start] = 1
     stack.push(start)
     while (stack.length) {
-      const p = stack.pop()
+      const p = stack.pop()!
       comp.push(p)
       const x = p % w
       const y = (p - x) / w
@@ -602,7 +653,7 @@ export function removeSpecks(img, minSize = 64) {
 }
 
 // 按 alpha 求内容包围盒
-export function alphaBBox(img, threshold = 8) {
+export function alphaBBox(img: AlphaImage, threshold = 8): Box | null {
   const { width: w, height: h, alpha } = img
   let minX = w, minY = h, maxX = -1, maxY = -1
   for (let y = 0; y < h; y++) {
@@ -623,7 +674,7 @@ export function alphaBBox(img, threshold = 8) {
 // 这一关只能在这里做。发布出去的贴图只有 WebP，而本项目零依赖、没有 WebP 解码器，
 // 到了 img/flowers/ 那边就再也看不到像素了 —— 所以几何检查必须留在
 // 还能拿到 RGBA 的生成管线里，而不是事后对着成品做。
-export function auditSprite(img, size, opts = {}) {
+export function auditSprite(img: RgbaImage, size: number, opts: AuditOptions = {}): string | null {
   const { minCoverage = 0.15, maxCoverage = 0.95, minMargin = 2, maxOffset = 0.08 } = opts
   const { width: w, height: h, data } = img
 
@@ -652,7 +703,7 @@ export function auditSprite(img, size, opts = {}) {
 }
 
 // 面积平均重采样（先水平后垂直）。颜色按预乘 alpha 平均，避免边缘出现深色描边。
-export function resizeToSquare(img, box, outSize, pad = 0.06) {
+export function resizeToSquare(img: RgbaImage & AlphaImage, box: Box, outSize: number, pad = 0.06): RgbaImage {
   const { width: w, data, alpha } = img
   const side = Math.max(box.width, box.height) * (1 + pad * 2)
   const cx = box.x + box.width / 2
@@ -714,7 +765,7 @@ export function resizeToSquare(img, box, outSize, pad = 0.06) {
 
 // 把一块区域涂成纯白（相对坐标 0~1）。用来擦掉角落的水印：
 // 涂白之后它会和边框连成一片，被洪水填充一起判成背景。
-export function paintWhite(img, rect) {
+export function paintWhite(img: RgbaImage, rect: Rect) {
   const { width: w, height: h, data } = img
   const x0 = Math.max(0, Math.floor(rect.x * w))
   const y0 = Math.max(0, Math.floor(rect.y * h))
@@ -729,7 +780,7 @@ export function paintWhite(img, rect) {
 }
 
 // 裁出 img 的一个矩形子区。网格生图就是靠它切成单朵小图。
-export function crop(img, x, y, w, h) {
+export function crop(img: RgbaImage, x: number, y: number, w: number, h: number): RgbaImage {
   const out = new Uint8Array(w * h * 4)
   for (let r = 0; r < h; r++) {
     const s = ((y + r) * img.width + x) * 4
@@ -740,7 +791,7 @@ export function crop(img, x, y, w, h) {
 
 // 一步到位：擦水印 → 去白底 → 裁到内容 → 居中留白 → 缩放到 outSize 的 RGBA
 // 入参既可以是 PNG Buffer（内部解码），也可以是 decodePng/crop 的产物（直接处理）
-export function toFlowerSprite(png, outSize = 224, pad = 0.06, masks = []) {
+export function toFlowerSprite(png: Buffer | RgbaImage, outSize = 224, pad = 0.06, masks: Rect[] = []): RgbaImage {
   const img = png instanceof Uint8Array ? decodePng(png) : png
   // 黑底图先归一成白底，再擦水印 —— paintWhite 涂的是白，黑底上涂白只会
   // 留下一块亮斑；归一化之后白斑才跟背景连成一片，被洪水一起吃掉。

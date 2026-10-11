@@ -1,10 +1,21 @@
 // 繁花 fanhua —— 点击页面，在手绘花海里绽放
 // 零依赖的原生 JS 插件：每次点击处随机绽放一朵花。
-// 花来自 img/flowers/ 里的 200 张透明底无损 WebP（见 src/flowers.js 清单）。
+// 花来自 img/flowers/ 里的 200 张透明底无损 WebP（见 src/flowers.ts 清单）。
 
-import { FLOWERS, FLOWER_COUNT, pickFlower } from './flowers.js'
+import { FLOWERS, FLOWER_COUNT, pickFlower } from './flowers.ts'
+import type { Flower } from './flowers.ts'
 
-const DEFAULTS = {
+export interface FanhuaOptions {
+  size?: number | [number, number]
+  position?: 'page' | 'screen'
+  duration?: number
+  zIndex?: number
+  imgBase?: string | null
+  preload?: boolean | number
+  rotate?: number
+}
+
+const DEFAULTS: Required<FanhuaOptions> = {
   size: [40, 110],    // 数字 = 固定大小；[min, max] = 区间随机
   position: 'page',   // 'page' 跟随页面滚动 | 'screen' 固定在屏幕上
   duration: 3000,     // 绽放多少毫秒后开始淡出；0 = 永驻
@@ -14,19 +25,21 @@ const DEFAULTS = {
   rotate: 12,         // 随机旋转角度上限（度），0 = 不旋转
 }
 
-let opts = { ...DEFAULTS }
+let opts: Required<FanhuaOptions> = { ...DEFAULTS }
 let listening = false
 
 // 打包成 IIFE 时，模块求值的那一刻 document.currentScript 就是插件自己的 <script>，
 // 借此把图库路径定位到插件旁边，而不是页面旁边。
-const SELF_SRC =
-  typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : null
+const SELF_SRC: string | null =
+  typeof document !== 'undefined' && document.currentScript instanceof HTMLScriptElement
+    ? document.currentScript.src
+    : null
 
 // ---------- 图库 ----------
 
-const cache = new Map() // file -> HTMLImageElement
+const cache = new Map<string, HTMLImageElement>() // file -> HTMLImageElement
 
-function resolveBase() {
+function resolveBase(): string {
   if (opts.imgBase) return opts.imgBase
   if (SELF_SRC) {
     try {
@@ -41,7 +54,7 @@ function resolveBase() {
 }
 
 // 取一张花的 <img>，同一张图只请求一次
-function imageFor(variety) {
+function imageFor(variety: Flower): HTMLImageElement {
   let img = cache.get(variety.file)
   if (!img) {
     img = new Image()
@@ -53,10 +66,10 @@ function imageFor(variety) {
 }
 
 // 预热：分批把图下下来，避免一口气糊满带宽
-export function preload(count) {
+export function preload(count?: number) {
   if (typeof document === 'undefined') return
   const n = count === undefined ? FLOWERS.length : Math.min(count, FLOWERS.length)
-  const list = n >= FLOWERS.length ? FLOWERS : shuffle(FLOWERS).slice(0, n)
+  const list: Flower[] = n >= FLOWERS.length ? FLOWERS : shuffle(FLOWERS).slice(0, n)
   let i = 0
   const step = () => {
     const end = Math.min(i + 4, list.length)
@@ -66,7 +79,7 @@ export function preload(count) {
   step()
 }
 
-function shuffle(arr) {
+function shuffle<T>(arr: readonly T[]): T[] {
   const a = arr.slice()
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
@@ -116,7 +129,7 @@ function ensureStyle() {
 // ---------- 参数 ----------
 
 // 归一化 size：非法时返回 null，由调用方回落默认值
-function normalizeSize(size) {
+function normalizeSize(size: FanhuaOptions['size']): [number, number] | null {
   if (typeof size === 'number' && Number.isFinite(size) && size > 0) return [size, size]
   if (
     Array.isArray(size) && size.length === 2 &&
@@ -129,18 +142,18 @@ function normalizeSize(size) {
 
 // ---------- 绽放 ----------
 
-function fade(el) {
+function fade(el: HTMLElement) {
   if (!el.isConnected) return
   el.classList.add('is-fading')
   setTimeout(() => el.remove(), 750)
 }
 
 // 在指定位置绽放一朵花；x/y 为视口坐标，会按 position 换算
-export function bloom(clientX, clientY, overrides = {}) {
+export function bloom(clientX: number, clientY: number, overrides: FanhuaOptions = {}) {
   if (typeof document === 'undefined') return
-  const o = { ...opts, ...overrides }
+  const o: Required<FanhuaOptions> = { ...opts, ...overrides }
 
-  const range = normalizeSize(o.size) || normalizeSize(DEFAULTS.size)
+  const range = normalizeSize(o.size) || normalizeSize(DEFAULTS.size) as [number, number]
   const size = Math.round(range[0] + Math.random() * (range[1] - range[0]))
 
   const variety = pickFlower()
@@ -157,7 +170,7 @@ export function bloom(clientX, clientY, overrides = {}) {
   }
 
   // 用 cloneNode 而不是直接挂缓存里的那个：缓存实例同时只可能在一个位置上
-  const img = source.cloneNode(false)
+  const img = source.cloneNode(false) as HTMLImageElement
   img.alt = ''
   img.draggable = false
   el.appendChild(img)
@@ -195,12 +208,12 @@ export function bloom(clientX, clientY, overrides = {}) {
 
 // ---------- 生命周期 ----------
 
-function onClick(e) {
+function onClick(e: MouseEvent) {
   if (e.button !== undefined && e.button !== 0) return // 只响应主键
   bloom(e.clientX, e.clientY)
 }
 
-export function init(options = {}) {
+export function init(options: FanhuaOptions = {}) {
   opts = { ...opts, ...options }
   if (listening || typeof document === 'undefined') return
   ensureStyle()
@@ -216,7 +229,7 @@ export function init(options = {}) {
 }
 
 // 更新配置，不必重新 init
-export function setOptions(options = {}) {
+export function setOptions(options: FanhuaOptions = {}) {
   opts = { ...opts, ...options }
 }
 

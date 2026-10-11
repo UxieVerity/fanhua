@@ -2,16 +2,16 @@
 //
 // 注意这里查不了「花有没有被裁断、背景抠干净没」—— 那种检查要看到像素，
 // 而发布出去的只有 WebP，本项目零依赖、没有 WebP 解码器。几何体检放在生成时做，
-// 见 scripts/png.mjs 的 auditSprite。这个脚本管的是清单与文件是否对得上、
+// 见 scripts/png.ts 的 auditSprite。这个脚本管的是清单与文件是否对得上、
 // 以及贴图有没有被换编码/改尺寸。
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { FLOWERS, FLOWER_COUNT, SPRITE_SIZE, pickFlower } from '../src/flowers.js'
+import { FLOWERS, FLOWER_COUNT, SPRITE_SIZE, pickFlower } from '../src/flowers.ts'
 
 const IMG_DIR = fileURLToPath(new URL('../img/flowers/', import.meta.url))
 
 let failed = 0
-const fail = (msg) => {
+const fail = (msg: string) => {
   console.error(`✗ ${msg}`)
   failed++
 }
@@ -21,10 +21,10 @@ if (FLOWER_COUNT < 100) fail('花种不足 100')
 
 // ---------- 清单本身 ----------
 
-const ids = new Set()
-const names = new Set()
-const files = new Set()
-const bySpecies = new Map()
+const ids = new Set<string>()
+const names = new Set<string>()
+const files = new Set<string>()
+const bySpecies = new Map<string, number>()
 
 for (const v of FLOWERS) {
   if (ids.has(v.id)) fail(`编号重复: ${v.id}`)
@@ -51,7 +51,7 @@ for (const v of FLOWERS) {
 // VP8L 头：1 字节签名 0x2F，紧接 4 字节小端位流 ——
 // 低 14 位是「宽 - 1」，接着 14 位是「高 - 1」，再往后是 alpha 标记与版本号。
 // 没有解码器也能拿到尺寸，够用了。
-function vp8lSize(buf) {
+function vp8lSize(buf: Buffer) {
   const bits = buf[21] | (buf[22] << 8) | (buf[23] << 16) | (buf[24] << 24)
   return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
 }
@@ -59,7 +59,7 @@ function vp8lSize(buf) {
 let totalBytes = 0
 let smallest = Infinity
 let largest = 0
-const seen = new Set() // 见过的文件名，用来查孤儿；不合格的也算见过，免得重复报错
+const seen = new Set<string>() // 见过的文件名，用来查孤儿；不合格的也算见过，免得重复报错
 
 for (const v of FLOWERS) {
   const name = v.file
@@ -77,7 +77,7 @@ for (const v of FLOWERS) {
   }
 
   // 主 chunk 必须是 VP8L。掉成 VP8/VP8X 就是有损编码了，多半是转码参数被改坏
-  // —— 见 scripts/webp.mjs 文件头记的那两个 ffmpeg 的坑。
+  // —— 见 scripts/webp.ts 文件头记的那两个 ffmpeg 的坑。
   const fourCC = buf.subarray(12, 16).toString('latin1')
   if (fourCC !== 'VP8L') {
     fail(`${name}: 不是无损 WebP（主 chunk 是 ${fourCC}）`)
@@ -101,7 +101,7 @@ const onDisk = readdirSync(IMG_DIR).filter((f) => f.endsWith('.webp'))
 for (const f of onDisk) if (!seen.has(f)) fail(`img/flowers/${f} 不在清单里`)
 for (const v of FLOWERS) if (!onDisk.includes(v.file)) fail(`清单里的 ${v.file} 没有对应文件`)
 
-const manifest = JSON.parse(readFileSync(IMG_DIR + 'manifest.json', 'utf8'))
+const manifest: { count: number; size: number } = JSON.parse(readFileSync(IMG_DIR + 'manifest.json', 'utf8'))
 if (manifest.count !== FLOWER_COUNT) fail(`manifest.json 记了 ${manifest.count} 条，清单里是 ${FLOWER_COUNT} 条`)
 if (manifest.size !== SPRITE_SIZE) fail(`manifest.json 边长 ${manifest.size} 与 SPRITE_SIZE ${SPRITE_SIZE} 不一致`)
 

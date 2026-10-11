@@ -1,4 +1,4 @@
-// 批量生图 → 处理成透明底贴图 → 写 img/flowers/ 与 src/flowers.js
+// 批量生图 → 处理成透明底贴图 → 写 img/flowers/ 与 src/flowers.ts
 //
 // 全部走「网格模式」：文生图按张计费，单张上限 2048×2048。
 // 一张 2048×2048 塞 2×2 = 4 朵花（每格 1024×1024），切开后再逐朵走
@@ -6,19 +6,19 @@
 // 子图翻大两倍后抠图边缘质量明显更好，代价是摊薄倍数降了。
 // 早期还有逐朵出图的单花模式，成本是网格的 4 倍，已随 prompt 升级退役。
 // prompt 要求白底 + 花朵细黑线描边；黑底图和模型真给透明 alpha 的图也
-// 都能处理（黑底自动反色成白底再抠，见 scripts/png.mjs 的 normalizeBackground）。
+// 都能处理（黑底自动反色成白底再抠，见 scripts/png.ts 的 normalizeBackground）。
 //
-//   node txt2img/generate.mjs                 # 补齐缺的（raw 在就不再调接口）
-//   node txt2img/generate.mjs --limit 1       # 只跑第一张网格图（试水）
-//   node txt2img/generate.mjs --index 30      # 按花种序号指定范围（30、30-37、30,32,35-37 均可）
-//   node txt2img/generate.mjs --index 30 --from-raw   # 只重跑指定序号的处理管线，不调接口
-//   node txt2img/generate.mjs --force         # 无视 raw 重新调接口（重新花钱）
-//   node txt2img/generate.mjs --from-raw      # 不调接口，拿 txt2img/raw/ 重跑处理管线
+//   node txt2img/generate.ts                 # 补齐缺的（raw 在就不再调接口）
+//   node txt2img/generate.ts --limit 1       # 只跑第一张网格图（试水）
+//   node txt2img/generate.ts --index 30      # 按花种序号指定范围（30、30-37、30,32,35-37 均可）
+//   node txt2img/generate.ts --index 30 --from-raw   # 只重跑指定序号的处理管线，不调接口
+//   node txt2img/generate.ts --force         # 无视 raw 重新调接口（重新花钱）
+//   node txt2img/generate.ts --from-raw      # 不调接口，拿 txt2img/raw/ 重跑处理管线
 //
 // 指定 --index 时只有这些网格会被处理，WebP 转码也只覆盖本轮动过的花，
 // 库里其他成品原样不动（清单仍按全库重写，不受影响）。
-//   node txt2img/generate.mjs --emit-only     # 不调接口，只按现有成品重新生成清单
-//   --grid 2 --cell 1024 --size 2048x2048     # 网格规格与出图尺寸（默认即此）
+//   node txt2img/generate.ts --emit-only     # 不调接口，只按现有成品重新生成清单
+//   --grid 2 --cell 1024 --size 2048x2048    # 网格规格与出图尺寸（默认即此）
 //
 // 网格原图的文件名带上网格规格（g01-2x1024.png），不同规格切法不同，
 // 混用会把一张图切错 —— 旧规格的 g01.png（4×4）留在原地不被新代码引用。
@@ -28,14 +28,16 @@
 //   txt2img/sprites/   处理好的 256px 透明底 PNG（中间产物）
 //   img/flowers/       发布出去的无损 WebP
 //
-// 中间那段的 PNG 是给 scripts/webp.mjs 吃的，也是唯一还能做几何体检的地方 ——
+// 中间那段的 PNG 是给 scripts/webp.ts 吃的，也是唯一还能做几何体检的地方 ——
 // 发布出去的 WebP 本项目解不开（零依赖，没有 WebP 解码器）。
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { buildTasks, buildGrids } from './prompts.mjs'
-import { textToImage, loadApiKey, pool } from './api.mjs'
-import { decodePng, crop, toFlowerSprite, encodePng, auditSprite } from '../scripts/png.mjs'
-import { encodeAll } from '../scripts/webp.mjs'
+import { buildTasks, buildGrids } from './prompts.ts'
+import type { FlowerTask, GridTask } from './prompts.ts'
+import { textToImage, loadApiKey, pool } from './api.ts'
+import { decodePng, crop, toFlowerSprite, encodePng, auditSprite } from '../scripts/png.ts'
+import type { RgbaImage } from '../scripts/png.ts'
+import { encodeAll } from '../scripts/webp.ts'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const RAW_DIR = fileURLToPath(new URL('./raw/', import.meta.url))
@@ -47,18 +49,18 @@ const PAD = 0.06
 // ---------- 命令行 ----------
 
 const argv = process.argv.slice(2)
-const flag = (name, fallback) => {
+const flag = (name: string, fallback: string) => {
   const i = argv.indexOf(`--${name}`)
   return i >= 0 ? argv[i + 1] : fallback
 }
-const has = (name) => argv.includes(`--${name}`)
+const has = (name: string) => argv.includes(`--${name}`)
 
-const LIMIT = Number(flag('limit', 0)) || Infinity
-const CONCURRENCY = Number(flag('concurrency', 4))
+const LIMIT = Number(flag('limit', '0')) || Infinity
+const CONCURRENCY = Number(flag('concurrency', '4'))
 const FORCE = has('force')
 const EMIT_ONLY = has('emit-only')
-const GRID = Number(flag('grid', 2))
-const CELL = Number(flag('cell', 1024))
+const GRID = Number(flag('grid', '2'))
+const CELL = Number(flag('cell', '1024'))
 const SIZE = flag('size', '')
 // 接口单张上限 2048，默认规格超了就按上限出图（切图按实际宽高算，不会错位）
 const canvas = Math.min(GRID * CELL, 2048)
@@ -69,8 +71,8 @@ mkdirSync(SPRITE_DIR, { recursive: true })
 mkdirSync(OUT_DIR, { recursive: true })
 
 // --index 30、--index 30-37、--index 30,32,35-37 都行；序号即网格 id 里的数字
-function parseIndexes(spec) {
-  const want = new Set()
+function parseIndexes(spec: string) {
+  const want = new Set<number>()
   for (const part of spec.split(',')) {
     const m = part.match(/^(\d+)(?:-(\d+))?$/)
     if (!m) {
@@ -88,7 +90,7 @@ function parseIndexes(spec) {
   return want
 }
 
-let grids = buildGrids(GRID).slice(0, LIMIT)
+let grids: GridTask[] = buildGrids(GRID).slice(0, LIMIT)
 const INDEX = flag('index', '')
 if (INDEX) {
   const want = parseIndexes(INDEX)
@@ -101,7 +103,7 @@ if (INDEX) {
 }
 
 // 发布出去的是 .webp，所以「这张图有没有」看的是 WebP
-const outPath = (file) => `${OUT_DIR}${file.replace(/\.png$/, '.webp')}`
+const outPath = (file: string) => `${OUT_DIR}${file.replace(/\.png$/, '.webp')}`
 
 // ---------- 处理管线 ----------
 
@@ -109,8 +111,8 @@ const outPath = (file) => `${OUT_DIR}${file.replace(/\.png$/, '.webp')}`
 // 体检有问题就直接抛 —— 宁可这轮生图失败，也不能让一张被裁断/没抠干净的图
 // 悄悄流到 img/flowers/ 去。
 // 处理过的花记进 processedFiles，最后转 WebP 时只转这些。
-const processedFiles = []
-function processSprite(task, img) {
+const processedFiles: string[] = []
+function processSprite(task: FlowerTask, img: Buffer | RgbaImage) {
   const sprite = toFlowerSprite(img, SPRITE_SIZE, PAD)
   const png = encodePng(sprite.data, sprite.width, sprite.height)
   writeFileSync(`${SPRITE_DIR}${task.file}`, png)
@@ -123,9 +125,9 @@ function processSprite(task, img) {
 
 // 一张网格原图切成 grid×grid 块，每块一朵，顺序与 prompt 里的逐格点名一致
 // 原图文件名带上网格规格，不同规格的原图不会串
-const gridRawPath = (g) => `${RAW_DIR}${g.id}-${g.grid}x${g.cell}.png`
+const gridRawPath = (g: GridTask) => `${RAW_DIR}${g.id}-${g.grid}x${g.cell}.png`
 
-function processGrid(g) {
+function processGrid(g: GridTask) {
   const img = decodePng(readFileSync(gridRawPath(g)))
   const { width: w, height: h } = img
   if (w !== h || w % g.grid !== 0) {
@@ -178,7 +180,7 @@ if (has('from-raw')) {
 
 // ---------- 转成发布用的 WebP ----------
 // 要 ffmpeg。没有就到此为止 —— 中间产物在 txt2img/sprites/，装完再跑
-// node scripts/webp.mjs 补上就行，不用重新生图。
+// node scripts/webp.ts 补上就行，不用重新生图。
 try {
   // 只转这轮处理过的花（only 传空数组就是一个都不转）；没动过的成品直接复用
   const r = encodeAll({ force: true, only: processedFiles })
@@ -189,12 +191,12 @@ try {
     `(比 PNG 少 ${((1 - r.webpBytes / r.pngBytes) * 100).toFixed(1)}%)`
   )
 } catch (err) {
-  console.error(`✗ ${err.message}`)
-  console.error('  中间产物在 txt2img/sprites/，装好 ffmpeg 后跑 node scripts/webp.mjs 即可补上')
+  console.error(`✗ ${err instanceof Error ? err.message : err}`)
+  console.error('  中间产物在 txt2img/sprites/，装好 ffmpeg 后跑 node scripts/webp.ts 即可补上')
   process.exit(1)
 }
 
-// ---------- 写清单与 src/flowers.js ----------
+// ---------- 写清单与 src/flowers.ts ----------
 
 const entries = buildTasks()
   .filter((t) => existsSync(outPath(t.file)))
@@ -209,24 +211,35 @@ const lines = entries.map(
   (e) => `  { id: '${e.id}', name: '${e.name}', species: '${e.species}', file: '${e.file}' },`
 )
 writeFileSync(
-  `${ROOT}src/flowers.js`,
-  `// 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
+  `${ROOT}src/flowers.ts`,
+  `// 花朵图库清单 —— 由 txt2img/generate.ts 生成，不要手改。
 // 贴图在 img/flowers/ 下，共 ${entries.length} 张，${SPRITE_SIZE}x${SPRITE_SIZE} 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
+export interface Flower {
+  /** 编号，如 '001' */
+  id: string
+  /** 花名·颜色，如 '雏菊·白' */
+  name: string
+  /** 花种名，如 '雏菊' */
+  species: string
+  /** 贴图文件名（相对图库根） */
+  file: string
+}
+
 export const SPRITE_SIZE = ${SPRITE_SIZE}
 
-export const FLOWERS = [
+export const FLOWERS: Flower[] = [
 ${lines.join('\n')}
 ]
 
-export const FLOWER_COUNT = FLOWERS.length
+export const FLOWER_COUNT: number = FLOWERS.length
 
 // 随机抽一朵；传入 rand 可换成自己的随机源（便于测试复现）
-export function pickFlower(rand = Math.random) {
+export function pickFlower(rand: () => number = Math.random): Flower {
   return FLOWERS[Math.min(FLOWER_COUNT - 1, Math.floor(rand() * FLOWER_COUNT))]
 }
 `
 )
 
-console.log(`✓ src/flowers.js 已更新（${entries.length} 条）`)
+console.log(`✓ src/flowers.ts 已更新（${entries.length} 条）`)

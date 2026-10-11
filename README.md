@@ -2,7 +2,7 @@
 
 > 每一次点击，都在指尖开出一朵手绘小花。
 
-繁花是一个零依赖的原生 JS 插件：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **200 张透明底无损 WebP 贴图**——50 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
+繁花是一个零依赖的 TypeScript 插件（发布产物是原生 JS）：点击页面任意位置，点击处会随机绽放一朵手绘小花。花来自内置的 **200 张透明底无损 WebP 贴图**——50 种花 × 4 种颜色——所以同一页开出来的花几乎不会重样。
 
 ![demo](demo/demo.png)
 
@@ -30,7 +30,7 @@ npm install fanhua
 
 花图在 `img/flowers/` 里，跟着插件一起发布即可。
 
-> **浏览器要求**：贴图是无损 WebP，需要浏览器支持 WebP。Chrome 32+ / Firefox 65+ / Safari 14+ / Edge 18+ 都没问题，覆盖率 97% 以上；IE、Safari 13 及更早、以及部分老 Android WebView 开不出花（不报错，只是点了没反应）。如果要覆盖这些环境，自己把 `img/flowers/` 换成 PNG 并把 `src/flowers.js` 里的 `file` 后缀改成 `.png` 即可，插件不关心扩展名。
+> **浏览器要求**：贴图是无损 WebP，需要浏览器支持 WebP。Chrome 32+ / Firefox 65+ / Safari 14+ / Edge 18+ 都没问题，覆盖率 97% 以上；IE、Safari 13 及更早、以及部分老 Android WebView 开不出花（不报错，只是点了没反应）。如果要覆盖这些环境，自己把 `img/flowers/` 换成 PNG 并把 `src/flowers.ts` 里的 `file` 后缀改成 `.png` 即可，插件不关心扩展名。
 
 ## 快速上手
 
@@ -122,11 +122,11 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 4. 逐行挑最省的 PNG 滤波方式后 deflate，落到 `txt2img/sprites/`
 5. 转成无损 WebP 落到 `img/flowers/`，中间那批 PNG 到此为止，不跟着发布
 
-第 5 步值得说明一下：PNG 内部已经是 deflate，外面再套 gzip / brotli 基本没有收益（实测 −0.0%），真正省体积的是换编码——同一批图 7.85 MB → 5.33 MB（−32%），且逐像素无损。转码用系统里的 ffmpeg，`scripts/webp.mjs` 里记了两个坑：必须显式 `-pix_fmt bgra`、且不能带 `-preset`，否则 ffmpeg 会悄悄编成有损的 yuva420p，体积看着掉到十分之一，其实色度已经被 4:2:0 降采样了。所以转完会验一遍主 chunk 是不是 `VP8L`。
+第 5 步值得说明一下：PNG 内部已经是 deflate，外面再套 gzip / brotli 基本没有收益（实测 −0.0%），真正省体积的是换编码——同一批图 7.85 MB → 5.33 MB（−32%），且逐像素无损。转码用系统里的 ffmpeg，`scripts/webp.ts` 里记了两个坑：必须显式 `-pix_fmt bgra`、且不能带 `-preset`，否则 ffmpeg 会悄悄编成有损的 yuva420p，体积看着掉到十分之一，其实色度已经被 4:2:0 降采样了。所以转完会验一遍主 chunk 是不是 `VP8L`。
 
 ### 为什么中间还要留一批 PNG
 
-因为**发布出去的 WebP 本项目解不开**。插件零依赖，没有 WebP 解码器，一旦贴图变成 `.webp`，"花有没有被裁断、背景抠干净没"这类需要看像素的检查就再也做不了。所以几何体检放在生成那一步（`scripts/png.mjs` 的 `auditSprite`），趁 PNG 还在手上做完；`npm test` 只负责清单自洽与文件结构——数量、命名、尺寸（从 VP8L 头里读）、以及编码方式是不是无损。
+因为**发布出去的 WebP 本项目解不开**。插件零依赖，没有 WebP 解码器，一旦贴图变成 `.webp`，"花有没有被裁断、背景抠干净没"这类需要看像素的检查就再也做不了。所以几何体检放在生成那一步（`scripts/png.ts` 的 `auditSprite`），趁 PNG 还在手上做完；`npm test` 只负责清单自洽与文件结构——数量、命名、尺寸（从 VP8L 头里读）、以及编码方式是不是无损。
 
 ## 生图管线配置（.env）
 
@@ -147,18 +147,19 @@ cp .env-example .env    # 然后填入自己的 ARK_API_KEY
 
 ```bash
 npm install
-npm run build   # 打包 dist/
-npm test        # 图库自检：清单自洽、每张都是尺寸正确的无损 WebP
+npm run typecheck  # tsc 全仓类型检查
+npm run build      # 打包 dist/
+npm test           # 图库自检：清单自洽、每张都是尺寸正确的无损 WebP
 npm run serve   # 启动 demo：http://localhost:4173
 ```
 
 生图要装 ffmpeg。`txt2img/raw/`（原始生图，约 190MB）不进版本库，其余脚本与中间产物都在：
 
 ```bash
-node txt2img/generate.mjs               # 按需补齐缺的花（调接口，花钱）
-node txt2img/generate.mjs --from-raw    # 拿 txt2img/raw/ 重跑处理管线，不重新生图
-node txt2img/generate.mjs --index 30 --force   # 按花种序号只重新生成指定网格（试水新 prompt 用）
-node scripts/webp.mjs --verify          # 只重转 WebP，并逐像素对一遍中间 PNG
+node txt2img/generate.ts               # 按需补齐缺的花（调接口，花钱）
+node txt2img/generate.ts --from-raw    # 拿 txt2img/raw/ 重跑处理管线，不重新生图
+node txt2img/generate.ts --index 30 --force   # 按花种序号只重新生成指定网格（试水新 prompt 用）
+node scripts/webp.ts --verify          # 只重转 WebP，并逐像素对一遍中间 PNG
 ```
 
 打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部花的花谱。

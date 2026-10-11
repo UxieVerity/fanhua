@@ -28,10 +28,13 @@ export function loadApiKey() {
   throw new Error('没有 API key：复制 .env-example 为 .env 并填入 ARK_API_KEY（或直接设同名环境变量）')
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // 生成一张图，返回 PNG Buffer
-export async function textToImage(prompt, { key, size = '1024x1024', retries = 3 } = {}) {
+export async function textToImage(
+  prompt: string,
+  { key, size = '1024x1024', retries = 3 }: { key: string; size?: string; retries?: number } = { key: '' },
+): Promise<Buffer> {
   const body = JSON.stringify({
     model: MODEL,
     prompt,
@@ -67,15 +70,20 @@ export async function textToImage(prompt, { key, size = '1024x1024', retries = 3
     } catch (err) {
       if (attempt >= retries) throw err
       const wait = 2000 * (attempt + 1)
-      console.warn(`  ↻ 第 ${attempt + 1} 次失败（${err.message.slice(0, 120)}），${wait}ms 后重试`)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`  ↻ 第 ${attempt + 1} 次失败（${msg.slice(0, 120)}），${wait}ms 后重试`)
       await sleep(wait)
     }
   }
 }
 
 // 固定并发的任务池
-export async function pool(items, concurrency, worker) {
-  const results = new Array(items.length)
+export async function pool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, i: number) => R | Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
   let next = 0
   const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (true) {

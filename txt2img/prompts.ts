@@ -2,13 +2,44 @@
 // （4 种颜色铺满 4 格），生成脚本用 --index 按这个序号指定生成范围。
 // STYLE 后缀固定不变，保证所有图落在同一种画风里。
 
+export interface Species {
+  /** 网格序号，1 起连续编号；一种花一张网格图 */
+  index: number
+  /** 拼花名用的英文 key */
+  key: string
+  /** 中文名 */
+  cn: string
+  /** 四种花色，正好铺满 2×2 网格 */
+  colors: string[]
+}
+
+// 逐朵任务（见 tasksFrom）
+export interface FlowerTask {
+  id: string
+  index: number
+  file: string
+  name: string
+  species: string
+  color: string
+  flower: string
+}
+
+// 一个花种打包成的一张网格任务
+export interface GridTask {
+  id: string
+  grid: number
+  cell: number
+  tasks: FlowerTask[]
+  prompt: string
+}
+
 const STYLE =
   '手绘彩色铅笔插画风格，正视图俯视花朵，只有花朵本体（花冠），' +
   '没有花茎、叶片、枝条和背景装饰，花朵完整居中，背景为纯白色，' +
   '细腻的铅笔勾线与柔和渐变上色，纸面质感，插画感，画面干净'
 
 // index 从 1 连续编到 50；加新花种接着最大的 index 往下写即可。
-export const SPECIES = [
+export const SPECIES: Species[] = [
   { index: 1,  key: 'daisy',        cn: '雏菊',     colors: ['白色', '淡粉色', '淡黄色', '淡紫色'] },
   { index: 2,  key: 'rose',         cn: '玫瑰',     colors: ['深红色', '粉色', '香槟白色', '橙色'] },
   { index: 3,  key: 'tulip',        cn: '郁金香',   colors: ['红色', '黄色', '紫色', '白色'] },
@@ -62,8 +93,8 @@ export const SPECIES = [
 ]
 
 // 按 index 排好的花种清单，顺便查重 —— 后面的编号、打包都靠这个顺序
-function sortedSpecies() {
-  const seen = new Set()
+function sortedSpecies(): Species[] {
+  const seen = new Set<number>()
   for (const sp of SPECIES) {
     if (seen.has(sp.index)) throw new Error(`花种序号 ${sp.index} 重复（${sp.cn}）`)
     seen.add(sp.index)
@@ -72,8 +103,8 @@ function sortedSpecies() {
 }
 
 // 把花种清单展开成逐朵任务，编号从 startId 连续往后排
-function tasksFrom(startId) {
-  const tasks = []
+function tasksFrom(startId: number): FlowerTask[] {
+  const tasks: FlowerTask[] = []
   let n = startId - 1
   for (const sp of sortedSpecies()) {
     for (const color of sp.colors) {
@@ -96,13 +127,13 @@ function tasksFrom(startId) {
 }
 
 // 全部任务：200 朵，编号 001~200 连续
-export function buildTasks() {
+export function buildTasks(): FlowerTask[] {
   return tasksFrom(1)
 }
 
 // 网格 prompt：逐格点名，格子按行优先编号（左上第 1 格），
 // 这个顺序就是切图时的切块顺序，两边必须一致。
-function gridPrompt(chunk, grid, cell) {
+function gridPrompt(chunk: FlowerTask[], grid: number, cell: number) {
   const cells = chunk.map((t, i) => {
     const row = Math.floor(i / grid) + 1
     const col = (i % grid) + 1
@@ -124,7 +155,7 @@ function gridPrompt(chunk, grid, cell) {
 // —— 直接报错提醒改清单。
 // 默认 grid=2：文生图接口单张上限 2048，想要 1024×1024 的子图（切出来
 // 更清楚、抠图边缘更干净），一张只能装 2×2=4 朵，一种花正好一张。
-export function buildGrids(grid = 2, cell = 1024) {
+export function buildGrids(grid = 2, cell = 1024): GridTask[] {
   const all = tasksFrom(1)
   const per = grid * grid
   return sortedSpecies().map((sp) => {

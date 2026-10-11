@@ -4,21 +4,24 @@
   "description": "繁花 — 点击页面绽放手绘小花的零依赖 JS 插件，内置 200 张花朵贴图。Every click blooms a hand-drawn flower.",
   "main": "dist/fanhua.js",
   "module": "dist/fanhua.mjs",
+  "types": "./index.d.ts",
   "unpkg": "dist/fanhua.iife.js",
   "jsdelivr": "dist/fanhua.iife.js",
   "files": [
     "dist",
     "src",
+    "index.d.ts",
     "img/flowers",
     "README.md",
     "LICENSE"
   ],
   "type": "module",
   "scripts": {
-    "build": "node build.mjs",
-    "test": "node scripts/test.mjs",
-    "serve": "node scripts/serve.mjs",
-    "webp": "node scripts/webp.mjs"
+    "build": "node build.ts",
+    "test": "node scripts/test.ts",
+    "typecheck": "tsc --noEmit",
+    "serve": "node scripts/serve.ts",
+    "webp": "node scripts/webp.ts"
   },
   "keywords": [
     "click",
@@ -32,6 +35,8 @@
   "license": "MIT",
   "author": "UxieVerity",
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.25.0",
+    "typescript": "^7.0.2"
   }
 }
