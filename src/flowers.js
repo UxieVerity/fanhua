@@ -1,5 +1,5 @@
 // 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
-// 贴图在 img/flowers/ 下，共 100 张，256x256 透明底无损 WebP。
+// 贴图在 img/flowers/ 下，共 116 张，256x256 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
 export const SPRITE_SIZE = 256
@@ -105,6 +105,22 @@ export const FLOWERS = [
   { id: '098', name: '银莲花·白', species: '银莲花', file: '098-anemone-白.webp' },
   { id: '099', name: '银莲花·蓝紫', species: '银莲花', file: '099-anemone-蓝紫.webp' },
   { id: '100', name: '银莲花·粉', species: '银莲花', file: '100-anemone-粉.webp' },
+  { id: '101', name: '非洲菊·橙红', species: '非洲菊', file: '101-gerbera-橙红.webp' },
+  { id: '102', name: '非洲菊·明黄', species: '非洲菊', file: '102-gerbera-明黄.webp' },
+  { id: '103', name: '非洲菊·粉', species: '非洲菊', file: '103-gerbera-粉.webp' },
+  { id: '104', name: '非洲菊·白', species: '非洲菊', file: '104-gerbera-白.webp' },
+  { id: '105', name: '鸡蛋花·白', species: '鸡蛋花', file: '105-plumeria-白.webp' },
+  { id: '106', name: '鸡蛋花·粉红', species: '鸡蛋花', file: '106-plumeria-粉红.webp' },
+  { id: '107', name: '鸡蛋花·红黄', species: '鸡蛋花', file: '107-plumeria-红黄.webp' },
+  { id: '108', name: '鸡蛋花·淡黄', species: '鸡蛋花', file: '108-plumeria-淡黄.webp' },
+  { id: '109', name: '花毛茛·橙', species: '花毛茛', file: '109-ranunculus-橙.webp' },
+  { id: '110', name: '花毛茛·粉', species: '花毛茛', file: '110-ranunculus-粉.webp' },
+  { id: '111', name: '花毛茛·黄', species: '花毛茛', file: '111-ranunculus-黄.webp' },
+  { id: '112', name: '花毛茛·白', species: '花毛茛', file: '112-ranunculus-白.webp' },
+  { id: '113', name: '翠菊·蓝紫', species: '翠菊', file: '113-aster-蓝紫.webp' },
+  { id: '114', name: '翠菊·粉', species: '翠菊', file: '114-aster-粉.webp' },
+  { id: '115', name: '翠菊·白', species: '翠菊', file: '115-aster-白.webp' },
+  { id: '116', name: '翠菊·正红', species: '翠菊', file: '116-aster-正红.webp' },
 ]
 
 export const FLOWER_COUNT = FLOWERS.length
