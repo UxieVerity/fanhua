@@ -42,8 +42,20 @@ export const SPECIES_EXTRA = [
   { key: 'aster',      cn: '翠菊',     colors: ['蓝紫色', '粉色', '白色', '正红色'] },
 ]
 
+// 第三批花种：同样都不与前两批重复，编号续接 117 起。
+export const SPECIES_MORE = [
+  { key: 'daffodil',      cn: '水仙',     colors: ['黄色', '白色', '橙黄色', '奶白色'] },
+  { key: 'waterlily',     cn: '睡莲',     colors: ['粉红色', '鹅黄色', '淡紫色', '纯白色'] },
+  { key: 'poppy',         cn: '虞美人',   colors: ['正红色', '粉色', '橙红色', '白色'] },
+  { key: 'fuchsia',       cn: '倒挂金钟', colors: ['红紫双色', '粉紫色', '红白色', '紫白色'] },
+  { key: 'bleedingheart', cn: '荷包牡丹', colors: ['粉色', '纯白色', '淡红色', '红白色'] },
+  { key: 'crocus',        cn: '番红花',   colors: ['蓝紫色', '明黄色', '白色', '淡紫色'] },
+  { key: 'daylily',       cn: '萱草',     colors: ['橙黄色', '正红色', '淡黄色', '红橙色'] },
+  { key: 'alstroemeria',  cn: '六出花',   colors: ['橙色', '粉色', '黄色', '白色'] },
+]
+
 // 全部花种。加新花种时往对应数组追加即可，每种 4 色正好铺满一张 2×2 网格图。
-const ALL_SPECIES = [...SPECIES, ...SPECIES_EXTRA]
+const ALL_SPECIES = [...SPECIES, ...SPECIES_EXTRA, ...SPECIES_MORE]
 
 // 从一份花种清单展开成逐朵任务，编号从 startId 连续往后排
 function tasksFrom(speciesList, startId) {
@@ -68,7 +80,7 @@ function tasksFrom(speciesList, startId) {
   return tasks
 }
 
-// 全部任务：116 朵，编号 001~116 连续
+// 全部任务：148 朵，编号 001~148 连续
 export function buildTasks() {
   return tasksFrom(ALL_SPECIES, 1)
 }
