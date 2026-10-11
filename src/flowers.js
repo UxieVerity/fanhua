@@ -1,5 +1,5 @@
 // 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
-// 贴图在 img/flowers/ 下，共 116 张，256x256 透明底无损 WebP。
+// 贴图在 img/flowers/ 下，共 148 张，256x256 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
 export const SPRITE_SIZE = 256
@@ -121,6 +121,38 @@ export const FLOWERS = [
   { id: '114', name: '翠菊·粉', species: '翠菊', file: '114-aster-粉.webp' },
   { id: '115', name: '翠菊·白', species: '翠菊', file: '115-aster-白.webp' },
   { id: '116', name: '翠菊·正红', species: '翠菊', file: '116-aster-正红.webp' },
+  { id: '117', name: '水仙·黄', species: '水仙', file: '117-daffodil-黄.webp' },
+  { id: '118', name: '水仙·白', species: '水仙', file: '118-daffodil-白.webp' },
+  { id: '119', name: '水仙·橙黄', species: '水仙', file: '119-daffodil-橙黄.webp' },
+  { id: '120', name: '水仙·奶白', species: '水仙', file: '120-daffodil-奶白.webp' },
+  { id: '121', name: '睡莲·粉红', species: '睡莲', file: '121-waterlily-粉红.webp' },
+  { id: '122', name: '睡莲·鹅黄', species: '睡莲', file: '122-waterlily-鹅黄.webp' },
+  { id: '123', name: '睡莲·淡紫', species: '睡莲', file: '123-waterlily-淡紫.webp' },
+  { id: '124', name: '睡莲·纯白', species: '睡莲', file: '124-waterlily-纯白.webp' },
+  { id: '125', name: '虞美人·正红', species: '虞美人', file: '125-poppy-正红.webp' },
+  { id: '126', name: '虞美人·粉', species: '虞美人', file: '126-poppy-粉.webp' },
+  { id: '127', name: '虞美人·橙红', species: '虞美人', file: '127-poppy-橙红.webp' },
+  { id: '128', name: '虞美人·白', species: '虞美人', file: '128-poppy-白.webp' },
+  { id: '129', name: '倒挂金钟·红紫双', species: '倒挂金钟', file: '129-fuchsia-红紫.webp' },
+  { id: '130', name: '倒挂金钟·粉紫', species: '倒挂金钟', file: '130-fuchsia-粉紫.webp' },
+  { id: '131', name: '倒挂金钟·红白', species: '倒挂金钟', file: '131-fuchsia-红白.webp' },
+  { id: '132', name: '倒挂金钟·紫白', species: '倒挂金钟', file: '132-fuchsia-紫白.webp' },
+  { id: '133', name: '荷包牡丹·粉', species: '荷包牡丹', file: '133-bleedingheart-粉.webp' },
+  { id: '134', name: '荷包牡丹·纯白', species: '荷包牡丹', file: '134-bleedingheart-纯白.webp' },
+  { id: '135', name: '荷包牡丹·淡红', species: '荷包牡丹', file: '135-bleedingheart-淡红.webp' },
+  { id: '136', name: '荷包牡丹·红白', species: '荷包牡丹', file: '136-bleedingheart-红白.webp' },
+  { id: '137', name: '番红花·蓝紫', species: '番红花', file: '137-crocus-蓝紫.webp' },
+  { id: '138', name: '番红花·明黄', species: '番红花', file: '138-crocus-明黄.webp' },
+  { id: '139', name: '番红花·白', species: '番红花', file: '139-crocus-白.webp' },
+  { id: '140', name: '番红花·淡紫', species: '番红花', file: '140-crocus-淡紫.webp' },
+  { id: '141', name: '萱草·橙黄', species: '萱草', file: '141-daylily-橙黄.webp' },
+  { id: '142', name: '萱草·正红', species: '萱草', file: '142-daylily-正红.webp' },
+  { id: '143', name: '萱草·淡黄', species: '萱草', file: '143-daylily-淡黄.webp' },
+  { id: '144', name: '萱草·红橙', species: '萱草', file: '144-daylily-红橙.webp' },
+  { id: '145', name: '六出花·橙', species: '六出花', file: '145-alstroemeria-橙.webp' },
+  { id: '146', name: '六出花·粉', species: '六出花', file: '146-alstroemeria-粉.webp' },
+  { id: '147', name: '六出花·黄', species: '六出花', file: '147-alstroemeria-黄.webp' },
+  { id: '148', name: '六出花·白', species: '六出花', file: '148-alstroemeria-白.webp' },
 ]
 
 export const FLOWER_COUNT = FLOWERS.length

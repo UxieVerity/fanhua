@@ -10,7 +10,7 @@
 //
 //   node txt2img/generate.mjs                 # 补齐缺的（raw 在就不再调接口）
 //   node txt2img/generate.mjs --limit 1       # 只跑第一张网格图（试水）
-//   node txt2img/generate.mjs --only g01      # 只跑指定网格（逗号分隔可多个）
+//   node txt2img/generate.mjs --index 30      # 按花种序号指定范围（30、30-37、30,32,35-37 均可）
 //   node txt2img/generate.mjs --force         # 无视 raw 重新调接口（重新花钱）
 //   node txt2img/generate.mjs --from-raw      # 不调接口，拿 txt2img/raw/ 重跑处理管线
 //   node txt2img/generate.mjs --emit-only     # 不调接口，只按现有成品重新生成清单
@@ -64,13 +64,34 @@ mkdirSync(RAW_DIR, { recursive: true })
 mkdirSync(SPRITE_DIR, { recursive: true })
 mkdirSync(OUT_DIR, { recursive: true })
 
+// --index 30、--index 30-37、--index 30,32,35-37 都行；序号即网格 id 里的数字
+function parseIndexes(spec) {
+  const want = new Set()
+  for (const part of spec.split(',')) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/)
+    if (!m) {
+      console.error(`✗ --index ${spec} 里「${part}」看不懂，写 30、30-37 或 30,32,35-37`)
+      process.exit(1)
+    }
+    const a = Number(m[1])
+    const b = m[2] ? Number(m[2]) : a
+    if (b < a) {
+      console.error(`✗ --index ${spec} 里「${part}」范围写反了`)
+      process.exit(1)
+    }
+    for (let i = a; i <= b; i++) want.add(i)
+  }
+  return want
+}
+
 let grids = buildGrids(GRID).slice(0, LIMIT)
-const ONLY = flag('only', '')
-if (ONLY) {
-  const want = new Set(ONLY.split(','))
-  grids = grids.filter((g) => want.has(g.id))
+const INDEX = flag('index', '')
+if (INDEX) {
+  const want = parseIndexes(INDEX)
+  const all = buildGrids(GRID)
+  grids = grids.filter((g) => want.has(Number(g.id.slice(1))))
   if (!grids.length) {
-    console.error(`✗ --only ${ONLY} 没匹配到任何网格，可选：${buildGrids(GRID).map((g) => g.id).join(' ')}`)
+    console.error(`✗ --index ${INDEX} 没匹配到任何网格，可选 1~${all.length}`)
     process.exit(1)
   }
 }
