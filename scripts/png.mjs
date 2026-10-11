@@ -202,7 +202,7 @@ function estimateBackground(img, ring = 3) {
 // 局部平坦度：3x3 邻域内 min 通道的极差。
 // 这是「背景 / 花瓣」最可靠的分界线 —— 背景是平滑的（实测极差 0~1），
 // 而花瓣哪怕白到 250，也带着笔触纹理（实测极差 20~70）。
-function flatness(img, radius = 1) {
+export function flatness(img, radius = 1) {
   const { width: w, height: h, data } = img
   const mn = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) {
@@ -383,6 +383,7 @@ function floodBackground(img, limitAt) {
 //
 export function keyOutBackground(img, opts = {}) {
   const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12, peelTol = 25, haloFlat = 8 } = opts
+  const debug = opts.debug || null
   const { width: w, height: h, data } = img
   const strict = estimateBackground(img)
   const flat = flatness(img)
@@ -424,14 +425,14 @@ export function keyOutBackground(img, opts = {}) {
     if (y > 0) tryPush(p - w)
     if (y < h - 1) tryPush(p + w)
   }
+  const bg2 = opts.debug ? bg.slice() : null
   // 第三场：花瓣凹缝里的白底。缝只有几像素宽，过渡带的 3x3 邻域必然扫到
   // 花瓣，平滑判据在缝里天然失效（实测缝内 flatness 20+），上一场进不去。
   // 这场只看亮度。但亮度单打有风险：白花瓣通体都亮，会顺着手感纹理的缺口
-  // 灌满整片花瓣 —— 所以新到的区域按连通块验收：8 邻域腐蚀 10 轮（约 21px）
-  // 还剩像素的算「厚」，是白花瓣本体，整块退回；腐蚀完了的才是缝里夹着的
-  // 薄层背景，收下。彩色花瓣不亮，洪水碰不到；细窄的白花瓣尖连着宽的
-  // 花盘主体，同属一个厚连通块，也保得住。10 轮是给花瓣间隙留的：
-  // 翠菊瓣间 15~20px 宽的白底口袋也要能被腐蚀掉，而白花的花盘都大于它。
+  // 灌满整片花瓣 —— 所以新到的区域按连通块验收：向铅笔描边膨胀 2 轮后做
+  // 8 邻域腐蚀 10 轮（约 21px），还剩像素的算「厚」，是白花瓣本体，整块
+  // 退回；腐蚀完了的才是缝里夹着的薄层背景，收下。彩色花瓣不亮，洪水
+  // 碰不到；白花瓣连着自己的深灰描边，膨胀后量得出真实厚度，也保得住。
   const reached = new Uint8Array(w * h)
   const queue = []
   for (let p = 0; p < w * h; p++) if (bg[p]) queue.push(p)
@@ -474,33 +475,44 @@ export function keyOutBackground(img, opts = {}) {
       }
     }
   }
-  // 腐蚀 10 轮测厚度：还剩像素的连通块是「厚」的
-  let work = new Uint8Array(w * h)
-  for (let p = 0; p < w * h; p++) work[p] = reached[p]
-  for (let r = 0; r < 10; r++) {
-    const next = new Uint8Array(w * h)
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const p = y * w + x
-        if (!work[p]) continue
-        let ok = true
-        for (let dy = -1; dy <= 1 && ok; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const yy = y + dy
-            const xx = x + dx
-            if (yy < 0 || yy >= h || xx < 0 || xx >= w || !work[yy * w + xx]) { ok = false; break }
-          }
-        }
-        if (ok) next[p] = 1
+  // 候选连通块按「墙的成色」验收。亮色洪水的候选块有两种：
+  //   花瓣亮核 —— 洪水从描边缺口灌进白花瓣（115 翠菊实测整片薄瓣被灌满），
+  //               它四周的墙是铅笔描边：深灰、低饱和；
+  //   瓣间白底 —— 真背景楔缝（116 红翠菊的 15~20px 白口袋），两侧的墙是
+  //               花瓣彩色本体或它的抗锯齿边：饱和度高。
+  // 灰墙占多数的是花瓣，整块退回；彩墙占多数的是背景，收下。
+  // 实测（g01 网格图）：花瓣亮核灰墙占比 0.96~1.00，红翠菊楔缝 0.20~0.32，
+  // 判 0.6 两边都留足余量。墙上一块都不沾的（浮在背景里的亮屑）当背景收下。
+  const grayWall = new Int32Array(ncomp + 1)
+  const satWall = new Int32Array(ncomp + 1)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x
+      if (!reached[p]) continue
+      const c = comp[p]
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const xx = x + dx
+        const yy = y + dy
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue
+        const q = yy * w + xx
+        if (bg[q] || reached[q]) continue
+        const r = data[q * 4]
+        const g = data[q * 4 + 1]
+        const b = data[q * 4 + 2]
+        if (Math.max(r, g, b) - Math.min(r, g, b) < 32) grayWall[c]++
+        else satWall[c]++
       }
     }
-    work = next
   }
-  const thick = new Uint8Array(ncomp + 1)
-  for (let p = 0; p < w * h; p++) if (work[p]) thick[comp[p]] = 1
-  for (let p = 0; p < w * h; p++) if (reached[p] && !thick[comp[p]]) bg[p] = 1
+  const keep = new Uint8Array(ncomp + 1)
+  for (let c = 1; c <= ncomp; c++) {
+    const wall = grayWall[c] + satWall[c]
+    keep[c] = wall > 0 && grayWall[c] * 5 >= wall * 3
+  }
+  for (let p = 0; p < w * h; p++) if (reached[p] && !keep[comp[p]]) bg[p] = 1
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
+  if (debug) Object.assign(debug, { bg, bg2, reached, comp, keep, ncomp })
   return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
 }
 
