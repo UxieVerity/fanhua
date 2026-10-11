@@ -385,6 +385,13 @@ export function keyOutBackground(img, opts = {}) {
   const { tol = 4, block = 32, pct = 0.5, flatTol = 3, border = 3, borderTol = 12, peelTol = 25, haloFlat = 8 } = opts
   const debug = opts.debug || null
   const { width: w, height: h, data } = img
+  // prompt 要求了透明底，模型可能真给 alpha：全透明像素的 RGB 是未定义的
+  // 垃圾值，会污染平坦度和局部背景亮度的统计，先洗成白 —— 亮度洪水会把
+  // 它们当背景正常吃掉。半透明的边缘像素不动，那里的 RGB 本来就是花的颜色。
+  for (let p = 0; p < w * h; p++) {
+    if (data[p * 4 + 3] > 8) continue
+    data[p * 4] = data[p * 4 + 1] = data[p * 4 + 2] = 255
+  }
   const strict = estimateBackground(img)
   const flat = flatness(img)
   const level = localBackground(img, block, pct, strict, flat, flatTol)
