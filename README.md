@@ -153,7 +153,7 @@ npm test           # 图库自检：清单自洽、每张都是尺寸正确的�
 npm run serve   # 启动 demo：http://localhost:4173
 ```
 
-生图要装 ffmpeg。`txt2img/raw/`（原始生图，约 190MB）不进版本库，其余脚本与中间产物都在：
+生图要装 ffmpeg。`txt2img/raw/`（原始网格生图，约 292MB）已入库，其余中间产物随时可由它重造：
 
 ```bash
 node txt2img/generate.ts               # 按需补齐缺的花（调接口，花钱）
