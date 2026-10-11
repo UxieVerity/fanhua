@@ -11,8 +11,12 @@
 //   node txt2img/generate.mjs                 # 补齐缺的（raw 在就不再调接口）
 //   node txt2img/generate.mjs --limit 1       # 只跑第一张网格图（试水）
 //   node txt2img/generate.mjs --index 30      # 按花种序号指定范围（30、30-37、30,32,35-37 均可）
+//   node txt2img/generate.mjs --index 30 --from-raw   # 只重跑指定序号的处理管线，不调接口
 //   node txt2img/generate.mjs --force         # 无视 raw 重新调接口（重新花钱）
 //   node txt2img/generate.mjs --from-raw      # 不调接口，拿 txt2img/raw/ 重跑处理管线
+//
+// 指定 --index 时只有这些网格会被处理，WebP 转码也只覆盖本轮动过的花，
+// 库里其他成品原样不动（清单仍按全库重写，不受影响）。
 //   node txt2img/generate.mjs --emit-only     # 不调接口，只按现有成品重新生成清单
 //   --grid 2 --cell 1024 --size 2048x2048     # 网格规格与出图尺寸（默认即此）
 //
@@ -104,10 +108,13 @@ const outPath = (file) => `${OUT_DIR}${file.replace(/\.png$/, '.webp')}`
 // 抠图 → 存中间产物 → 体检。img 可以是 PNG Buffer，也可以是已解码/切好的图。
 // 体检有问题就直接抛 —— 宁可这轮生图失败，也不能让一张被裁断/没抠干净的图
 // 悄悄流到 img/flowers/ 去。
+// 处理过的花记进 processedFiles，最后转 WebP 时只转这些。
+const processedFiles = []
 function processSprite(task, img) {
   const sprite = toFlowerSprite(img, SPRITE_SIZE, PAD)
   const png = encodePng(sprite.data, sprite.width, sprite.height)
   writeFileSync(`${SPRITE_DIR}${task.file}`, png)
+  processedFiles.push(task.file)
 
   const bad = auditSprite(sprite, SPRITE_SIZE)
   if (bad) throw new Error(`${task.file}: ${bad}`)
@@ -173,7 +180,8 @@ if (has('from-raw')) {
 // 要 ffmpeg。没有就到此为止 —— 中间产物在 txt2img/sprites/，装完再跑
 // node scripts/webp.mjs 补上就行，不用重新生图。
 try {
-  const r = encodeAll({ force: true })
+  // 只转这轮处理过的花（only 传空数组就是一个都不转）；没动过的成品直接复用
+  const r = encodeAll({ force: true, only: processedFiles })
   for (const p of r.problems) console.error(`  ✗ ${p}`)
   if (r.problems.length) process.exitCode = 1
   console.log(

@@ -85,7 +85,9 @@ function diff(pngPath, webpPath, tmp) {
 }
 
 // 返回 { files, pngBytes, webpBytes, converted, reused, problems }
-export function encodeAll({ inDir = SPRITE_DIR, outDir = OUT_DIR, force = false, verify = false } = {}) {
+// only：PNG 文件名数组。给定时只转码/校验名单里的，名单外的只统计体积不重新编码
+// —— 生成脚本按 index 局部重跑时用，避免每次把整库重压一遍。
+export function encodeAll({ inDir = SPRITE_DIR, outDir = OUT_DIR, force = false, verify = false, only = null } = {}) {
   requireFfmpeg()
   inDir = withSep(inDir)
   outDir = withSep(outDir)
@@ -95,6 +97,8 @@ export function encodeAll({ inDir = SPRITE_DIR, outDir = OUT_DIR, force = false,
     throw new Error(`${inDir} 里没有 PNG —— 先跑 node txt2img/generate.mjs 产出贴图`)
   }
   mkdirSync(outDir, { recursive: true })
+
+  const wanted = only ? new Set(only) : null
 
   const tmp = mkdtempSync(join(tmpdir(), 'fanhua-webp-'))
   const problems = []
@@ -109,6 +113,14 @@ export function encodeAll({ inDir = SPRITE_DIR, outDir = OUT_DIR, force = false,
       const webpPath = outDir + name.replace(/\.png$/, '.webp')
       const pngSize = readFileSync(pngPath).length
       pngBytes += pngSize
+
+      if (wanted && !wanted.has(name)) {
+        if (existsSync(webpPath)) {
+          webpBytes += readFileSync(webpPath).length
+          reused++
+        }
+        return
+      }
 
       const tag = `[${String(n + 1).padStart(3)}/${names.length}] ${name}`
 
