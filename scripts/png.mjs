@@ -183,6 +183,45 @@ export function encodePng(rgba, w, h, level = 9) {
 
 // ---------- 图像处理 ----------
 
+// 背景极性归一化。prompt 要的是纯黑底，但整条抠图管线是按白底调的
+// （亮度洪水、「平滑的亮背景」判据、白缝验收全是）。黑底图进来先整体
+// 反色成白底，让下游全部按白底逻辑走，抠完再反回去 —— 反色是自逆运算，
+// 花的颜色不变。所有判据在反色下天然成立：平坦度看极差、灰/彩墙看
+// max-min，都不随反色变；黑背景反完就是亮的平滑背景，深色描边反完
+// 就是浅色描边，洪水「亮度贴着背景」的方向刚好对调。
+// 返回是否做了反色。白底图（外圈亮度中位数高）原样通过，老图不受影响。
+export function normalizeBackground(img) {
+  const { width: w, height: h, data } = img
+  const vals = []
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (x >= 3 && x < w - 3 && y >= 3 && y < h - 3) continue
+      const i = (y * w + x) * 4
+      vals.push(Math.min(data[i], data[i + 1], data[i + 2]))
+    }
+  }
+  vals.sort((a, b) => a - b)
+  if (vals[Math.floor(vals.length / 2)] >= 96) return false
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 4
+    data[i] = 255 - data[i]
+    data[i + 1] = 255 - data[i + 1]
+    data[i + 2] = 255 - data[i + 2]
+  }
+  return true
+}
+
+// 反转整张图的 RGB（不动 alpha）。normalizeBackground 的逆操作。
+function invertRgb(img) {
+  const { data } = img
+  for (let p = 0; p < img.width * img.height; p++) {
+    const i = p * 4
+    data[i] = 255 - data[i]
+    data[i + 1] = 255 - data[i + 1]
+    data[i + 2] = 255 - data[i + 2]
+  }
+}
+
 // 估计背景到底有多白：看最外一圈像素的 min 通道，取 90 分位
 // （取分位而不是最大值，花朵万一压到画边也不会把阈值带偏）
 function estimateBackground(img, ring = 3) {
@@ -392,6 +431,9 @@ export function keyOutBackground(img, opts = {}) {
     if (data[p * 4 + 3] > 8) continue
     data[p * 4] = data[p * 4 + 1] = data[p * 4 + 2] = 255
   }
+  // 黑底图先反成白底走下面这条老逻辑，抠完反回去（toFlowerSprite 已经
+  // 反过的图到这里中位数变高，自动跳过，不会反两次）
+  const inverted = normalizeBackground(img)
   const strict = estimateBackground(img)
   const flat = flatness(img)
   const level = localBackground(img, block, pct, strict, flat, flatTol)
@@ -519,6 +561,7 @@ export function keyOutBackground(img, opts = {}) {
   for (let p = 0; p < w * h; p++) if (reached[p] && !keep[comp[p]]) bg[p] = 1
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
+  if (inverted) invertRgb(img)
   if (debug) Object.assign(debug, { bg, bg2, reached, comp, keep, ncomp })
   return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
 }
@@ -690,6 +733,9 @@ export function crop(img, x, y, w, h) {
 // 入参既可以是 PNG Buffer（内部解码），也可以是 decodePng/crop 的产物（直接处理）
 export function toFlowerSprite(png, outSize = 224, pad = 0.06, masks = []) {
   const img = png instanceof Uint8Array ? decodePng(png) : png
+  // 黑底图先归一成白底，再擦水印 —— paintWhite 涂的是白，黑底上涂白只会
+  // 留下一块亮斑；归一化之后白斑才跟背景连成一片，被洪水一起吃掉
+  normalizeBackground(img)
   for (const rect of masks) paintWhite(img, rect)
   const keyed = removeSpecks(keyOutBackground(img))
   const box = alphaBBox(keyed)
