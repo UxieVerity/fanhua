@@ -154,7 +154,7 @@
 <header>
   <h1>繁 花</h1>
   <p>Fanhua — 每一次点击，都在指尖开出一朵手绘小花</p>
-  <p id="tagline">100 张手绘花朵贴图 · 25 种花 × 4 色 · 零依赖</p>
+  <p id="tagline">200 张手绘花朵贴图 · 50 种花 × 4 色 · 零依赖</p>
   <span class="hint">🌼 在页面任意处点击试试（这朵提示框除外）</span>
 </header>
 
@@ -205,9 +205,9 @@
   <pre><code>Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })</code></pre>
 
   <h3>花是怎么来的</h3>
-  <p>每一朵都是先用手绘插画的画风生成，再处理成透明底的方形贴图：抠掉白背景、按花朵本体裁切居中、缩到 256px，最后转成无损 WebP——比同画质的 PNG 小三分之一，而且花瓣边缘一个像素都没动。100 张合计 5.3 MB。点击时随机抽一张贴上，所以同一页开出来的花几乎不会重样。</p>
-  <p>花型有 25 种——雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、风铃草、芍药、牡丹、桔梗、鸢尾、百合、康乃馨、小苍兰、木槿、山茶、矢车菊、波斯菊、玉兰、大丽花、银莲花……每一种都配了 4 种颜色，加起来正好 100 张。</p>
-  <p>默认会在页面空闲时把 100 张图悄悄下下来，等你点击时就能立刻开花；不想让它占带宽的话，把 <code>preload</code> 关掉或者给个数字，就变成用到才加载。</p>
+  <p>每一朵都是先用手绘插画的画风生成，再处理成透明底的方形贴图：抠掉白背景、按花朵本体裁切居中、缩到 256px，最后转成无损 WebP——比同画质的 PNG 小三分之一，而且花瓣边缘一个像素都没动。200 张合计 10 MB。点击时随机抽一张贴上，所以同一页开出来的花几乎不会重样。</p>
+  <p>花型有 50 种——雏菊、玫瑰、郁金香、樱花、向日葵、莲花、菊花、三色堇、绣球、风铃草、芍药、牡丹、桔梗、鸢尾、百合、康乃馨、小苍兰、木槿、山茶、矢车菊、波斯菊、玉兰、大丽花、银莲花、非洲菊、鸡蛋花、水仙、睡莲、虞美人、倒挂金钟、荷包牡丹、番红花、萱草、六出花、朱顶红、蝴蝶兰、仙客来……每一种都配了 4 种颜色，加起来正好 200 张。</p>
+  <p>默认会在页面空闲时把 200 张图悄悄下下来，等你点击时就能立刻开花；不想让它占带宽的话，把 <code>preload</code> 关掉或者给个数字，就变成用到才加载。</p>
 
   <h3>滚到这里啦</h3>
   <p>如果你把定位方式切成 <code>page</code>，在这里点下的花会跟着页面一起滚动，像真的开在纸面上；如果切成 <code>screen</code>，花会钉在屏幕的那一点，页面怎么动它都不挪窝。试试就知道。</p>
@@ -216,7 +216,7 @@
 
 <section class="gallery">
   <h3>花谱</h3>
-  <p class="sub" id="gallerySub">全部 100 张</p>
+  <p class="sub" id="gallerySub">全部 200 张</p>
   <div class="grid" id="grid"></div>
 </section>
 
@@ -267,7 +267,9 @@
     grid.appendChild(cell)
   }
   $('gallerySub').textContent = `全部 ${Fanhua.FLOWER_COUNT} 张 · 悬停看花名`
-  $('tagline').textContent = `${Fanhua.FLOWER_COUNT} 张手绘花朵贴图 · 25 种花 × 4 色 · 零依赖`
+  // 种数从清单里现算，以后加花种这段不用跟着改
+  const speciesCount = new Set(Fanhua.FLOWERS.map((f) => f.species)).size
+  $('tagline').textContent = `${Fanhua.FLOWER_COUNT} 张手绘花朵贴图 · ${speciesCount} 种花 × 4 色 · 零依赖`
 
   Fanhua.init({ size: [40, 110], position: 'page', duration: 3000, rotate: 12 })
 </script>
