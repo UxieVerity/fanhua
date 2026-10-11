@@ -157,7 +157,7 @@ npm run serve   # 启动 demo：http://localhost:4173
 ```bash
 node txt2img/generate.mjs               # 按需补齐缺的花（调接口，花钱）
 node txt2img/generate.mjs --from-raw    # 拿 txt2img/raw/ 重跑处理管线，不重新生图
-node txt2img/generate.mjs --only g01 --force   # 只重新生成指定网格（试水新 prompt 用）
+node txt2img/generate.mjs --index 30 --force   # 按花种序号只重新生成指定网格（试水新 prompt 用）
 node scripts/webp.mjs --verify          # 只重转 WebP，并逐像素对一遍中间 PNG
 ```
 
