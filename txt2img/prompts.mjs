@@ -7,7 +7,7 @@ const STYLE =
   '没有花茎、叶片、枝条和背景装饰，花朵完整居中，背景为纯白色，' +
   '细腻的铅笔勾线与柔和渐变上色，纸面质感，插画感，画面干净'
 
-// index 从 1 连续编到 37；加新花种接着最大的 index 往下写即可。
+// index 从 1 连续编到 50；加新花种接着最大的 index 往下写即可。
 export const SPECIES = [
   { index: 1,  key: 'daisy',        cn: '雏菊',     colors: ['白色', '淡粉色', '淡黄色', '淡紫色'] },
   { index: 2,  key: 'rose',         cn: '玫瑰',     colors: ['深红色', '粉色', '香槟白色', '橙色'] },
@@ -46,6 +46,19 @@ export const SPECIES = [
   { index: 35, key: 'crocus',       cn: '番红花',   colors: ['蓝紫色', '明黄色', '白色', '淡紫色'] },
   { index: 36, key: 'daylily',      cn: '萱草',     colors: ['橙黄色', '正红色', '淡黄色', '红橙色'] },
   { index: 37, key: 'alstroemeria', cn: '六出花',   colors: ['橙色', '粉色', '黄色', '白色'] },
+  { index: 38, key: 'amaryllis',    cn: '朱顶红',   colors: ['正红色', '粉色', '纯白色', '橙红色'] },
+  { index: 39, key: 'phalaenopsis', cn: '蝴蝶兰',   colors: ['白色', '粉紫色', '明黄色', '紫红色'] },
+  { index: 40, key: 'cyclamen',     cn: '仙客来',   colors: ['粉红色', '正红色', '纯白色', '淡紫色'] },
+  { index: 41, key: 'petunia',      cn: '矮牵牛',   colors: ['蓝紫色', '粉红色', '紫红色', '纯白色'] },
+  { index: 42, key: 'marigold',     cn: '万寿菊',   colors: ['橙黄色', '金黄色', '明黄色', '橙红色'] },
+  { index: 43, key: 'gentian',      cn: '龙胆',     colors: ['深蓝色', '蓝紫色', '粉紫色', '纯白色'] },
+  { index: 44, key: 'hollyhock',    cn: '蜀葵',     colors: ['粉红色', '深红色', '紫红色', '淡黄色'] },
+  { index: 45, key: 'gloxinia',     cn: '大岩桐',   colors: ['红紫色', '蓝紫色', '粉红色', '纯白色'] },
+  { index: 46, key: 'africanviolet', cn: '非洲堇',  colors: ['蓝紫色', '粉紫色', '纯白色', '深紫色'] },
+  { index: 47, key: 'bluebell',     cn: '蓝铃花',   colors: ['蓝紫色', '淡蓝色', '粉紫色', '纯白色'] },
+  { index: 48, key: 'plum',         cn: '梅花',     colors: ['淡粉色', '正红色', '纯白色', '深粉色'] },
+  { index: 49, key: 'begonia',      cn: '秋海棠',   colors: ['粉红色', '正红色', '淡黄色', '纯白色'] },
+  { index: 50, key: 'calendula',    cn: '金盏菊',   colors: ['明黄色', '橙黄色', '淡黄色', '金橙色'] },
 ]
 
 // 按 index 排好的花种清单，顺便查重 —— 后面的编号、打包都靠这个顺序
@@ -82,7 +95,7 @@ function tasksFrom(startId) {
   return tasks
 }
 
-// 全部任务：148 朵，编号 001~148 连续
+// 全部任务：200 朵，编号 001~200 连续
 export function buildTasks() {
   return tasksFrom(1)
 }
