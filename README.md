@@ -116,8 +116,8 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 
 先定一张手绘雏菊作为画风锚点（[img/daisy.png](img/daisy.png)），用同一段风格描述生成 25 种花各 4 色，再统一处理成精灵图：
 
-1. 关掉水印出图，白底近白像素从四边洪水填充判为背景——用连通性而不是全局阈值，花瓣内部的高光才不会被一起抠掉
-2. 贴着背景的一圈按"离纯白多远"做柔和过渡，保住抗锯齿边缘
+1. 关掉水印出图。prompt 要求**纯黑底**出图，黑底与花色对比大、抠图边缘干净；黑底图在管线入口自动反色成白底，走按白底调好的抠图逻辑，抠完再反回来
+2. 从四边洪水填充判为背景——用连通性而不是全局阈值，花瓣内部与背景同色的区域才不会被一起抠掉
 3. 按花朵本体裁到包围盒、居中留白、面积平均重采样到 256px（颜色按预乘 alpha 平均，边缘不出深色描边）
 4. 逐行挑最省的 PNG 滤波方式后 deflate，落到 `txt2img/sprites/`
 5. 转成无损 WebP 落到 `img/flowers/`，中间那批 PNG 到此为止，不跟着发布
@@ -128,39 +128,40 @@ Fanhua.FLOWERS.forEach((f) => console.log(f.name, f.file))
 
 因为**发布出去的 WebP 本项目解不开**。插件零依赖，没有 WebP 解码器，一旦贴图变成 `.webp`，"花有没有被裁断、背景抠干净没"这类需要看像素的检查就再也做不了。所以几何体检放在生成那一步（`scripts/png.mjs` 的 `auditSprite`），趁 PNG 还在手上做完；`npm test` 只负责清单自洽与文件结构——数量、命名、尺寸（从 VP8L 头里读）、以及编码方式是不是无损。
 
+## 生图管线配置（.env）
+
+生图管线在 `txt2img/` 下，调用火山引擎「豆包 Seedream」文生图接口，密钥从仓库根的 `.env` 读取（`.env` 已被 gitignore，不会进版本库）：
+
+```bash
+cp .env-example .env    # 然后填入自己的 ARK_API_KEY
+```
+
+| 变量 | 必填 | 说明 |
+|------|:----:|------|
+| `ARK_API_KEY` | 是 | 火山方舟 API key，在[火山方舟控制台](https://console.volcengine.com/ark)开通模型后获取 |
+| `ARK_MODEL` | 否 | 生图模型，默认 `doubao-seedream-5-0-flash-260915` |
+
+也可以直接设环境变量 `ARK_API_KEY`，优先级高于 `.env`。
+
 ## 本地开发
 
 ```bash
 npm install
 npm run build   # 打包 dist/
-npm test        # 图库自检：100 张、清单自洽、每张都是尺寸正确的无损 WebP
+npm test        # 图库自检：清单自洽、每张都是尺寸正确的无损 WebP
 npm run serve   # 启动 demo：http://localhost:4173
 ```
 
-生图管线在 `txt2img/` 下，不进版本库（含 API key）。重跑贴图要装 ffmpeg：
+生图要装 ffmpeg。`txt2img/raw/`（原始生图，约 190MB）不进版本库，其余脚本与中间产物都在：
 
 ```bash
-node txt2img/generate.mjs --from-raw   # 拿 txt2img/raw/ 重跑处理管线，不重新生图
-node scripts/webp.mjs --verify         # 只重转 WebP，并逐像素对一遍中间 PNG
+node txt2img/generate.mjs               # 按需补齐缺的花（调接口，花钱）
+node txt2img/generate.mjs --from-raw    # 拿 txt2img/raw/ 重跑处理管线，不重新生图
+node txt2img/generate.mjs --only g01 --force   # 只重新生成指定网格（试水新 prompt 用）
+node scripts/webp.mjs --verify          # 只重转 WebP，并逐像素对一遍中间 PNG
 ```
 
-## 本地开发
-
-```bash
-npm install
-npm run build   # 打包 dist/
-npm test        # 图库自检：100 张、清单自洽、每张都是尺寸正确的无损 WebP
-npm run serve   # 启动 demo：http://localhost:4173
-```
-
-生图管线在 `txt2img/` 下，不进版本库（含 API key）。重跑贴图要装 ffmpeg：
-
-```bash
-node txt2img/generate.mjs --from-raw   # 拿 txt2img/raw/ 重跑处理管线，不重新生图
-node scripts/webp.mjs --verify         # 只重转 WebP，并逐像素对一遍中间 PNG
-```
-
-打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部 100 张的花谱。
+打开 demo 后点击页面任意处即可看效果，面板可以实时调整大小范围、定位方式、存活时间与随机旋转；页面底部有全部花的花谱。
 
 ## License
 

@@ -3,5 +3,9 @@ dist/
 .DS_Store
 *.log
 
-# 生图管线（含 API key），不进版本库
-txt2img/
+# 密钥只放本地
+.env
+
+# 生图管线：raw 原图 ~190MB 不进库；sprites 可用 --from-raw 重新生成
+txt2img/raw/
+txt2img/check.png
