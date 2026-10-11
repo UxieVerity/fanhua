@@ -1,11 +1,12 @@
 // 批量生图 → 处理成透明底贴图 → 写 img/flowers/ 与 src/flowers.js
 //
-// 新批次走「网格模式」：文生图按张计费，单张上限 2048×2048。
+// 全部走「网格模式」：文生图按张计费，单张上限 2048×2048。
 // 一张 2048×2048 塞 2×2 = 4 朵花（每格 1024×1024），切开后再逐朵走
 // 抠图管线，单朵成本摊薄 4 倍 —— 早期是 4×4=16 朵、每格 512，
 // 子图翻大两倍后抠图边缘质量明显更好，代价是摊薄倍数降了。
-// prompt 要求纯黑底；白底老图和模型真给透明 alpha 的图也都能处理
-//（黑底自动反色成白底再抠，见 scripts/png.mjs 的 normalizeBackground）。
+// 早期还有逐朵出图的单花模式，成本是网格的 4 倍，已随 prompt 升级退役。
+// prompt 要求白底 + 花朵细黑线描边；黑底图和模型真给透明 alpha 的图也
+// 都能处理（黑底自动反色成白底再抠，见 scripts/png.mjs 的 normalizeBackground）。
 //
 //   node txt2img/generate.mjs                 # 补齐缺的（raw 在就不再调接口）
 //   node txt2img/generate.mjs --limit 1       # 只跑第一张网格图（试水）
@@ -15,14 +16,11 @@
 //   node txt2img/generate.mjs --emit-only     # 不调接口，只按现有成品重新生成清单
 //   --grid 2 --cell 1024 --size 2048x2048     # 网格规格与出图尺寸（默认即此）
 //
-// 001~100 是旧的单花模式产物，raw/ 里已有原图，同样「缺成品时先复用 raw、不花钱」；
-// 只有连 raw 都没有的才会按单花 prompt 调一次接口。
-//
 // 网格原图的文件名带上网格规格（g01-2x1024.png），不同规格切法不同，
 // 混用会把一张图切错 —— 旧规格的 g01.png（4×4）留在原地不被新代码引用。
 //
 // 三段产物：raw/ 约 190MB 不进版本库（本机保留，贵，别丢），其余进版本库：
-//   txt2img/raw/       生图的原始 PNG —— 网格图 g01-2x1024.png…、旧单花 001.png…（贵，别丢）
+//   txt2img/raw/       生图的原始 PNG —— 网格图 g01-2x1024.png…（贵，别丢）
 //   txt2img/sprites/   处理好的 256px 透明底 PNG（中间产物）
 //   img/flowers/       发布出去的无损 WebP
 //
@@ -61,13 +59,11 @@ const SIZE = flag('size', '')
 // 接口单张上限 2048，默认规格超了就按上限出图（切图按实际宽高算，不会错位）
 const canvas = Math.min(GRID * CELL, 2048)
 const GRID_SIZE = SIZE || `${canvas}x${canvas}`
-const SINGLE_SIZE = SIZE || '1024x1024'
 
 mkdirSync(RAW_DIR, { recursive: true })
 mkdirSync(SPRITE_DIR, { recursive: true })
 mkdirSync(OUT_DIR, { recursive: true })
 
-const tasks = buildTasks()
 let grids = buildGrids(GRID).slice(0, LIMIT)
 const ONLY = flag('only', '')
 if (ONLY) {
@@ -81,10 +77,6 @@ if (ONLY) {
 
 // 发布出去的是 .webp，所以「这张图有没有」看的是 WebP
 const outPath = (file) => `${OUT_DIR}${file.replace(/\.png$/, '.webp')}`
-const gridTaskIds = new Set(grids.flatMap((g) => g.tasks.map((t) => t.id)))
-// --only 圈定网格范围时，单花批次整个退出本次运行 —— 否则 --force 会把
-// 范围外的任务（包括全部老单花）也当成「缺成品」全量重调接口
-const singles = ONLY ? [] : tasks.filter((t) => !gridTaskIds.has(t.id))
 
 // ---------- 处理管线 ----------
 
@@ -122,21 +114,15 @@ function processGrid(g) {
 // ---------- 生成 ----------
 
 if (has('from-raw')) {
-  // 不调接口：单花原图 + 网格原图都重跑处理管线
+  // 不调接口：网格原图重跑处理管线
   // （改了抠图/压缩参数后用这个，不用重新花钱生图）
-  const rawSingles = singles.filter((t) => existsSync(`${RAW_DIR}${t.id}.png`))
   const rawGrids = grids.filter((g) => existsSync(gridRawPath(g)))
-  console.log(`从 raw 重跑处理管线：单花 ${rawSingles.length} 张，网格 ${rawGrids.length} 张`)
+  console.log(`从 raw 重跑处理管线：网格 ${rawGrids.length} 张`)
   let n = 0
-  for (const task of rawSingles) {
-    const info = processSprite(task, readFileSync(`${RAW_DIR}${task.id}.png`))
-    n++
-    console.log(`[${String(n).padStart(3)}/${rawSingles.length + rawGrids.length * GRID * GRID}] ${task.id} ${task.name}  ${info.kb.toFixed(1)}KB`)
-  }
   for (const g of rawGrids) {
     const { cell } = processGrid(g)
     n += g.tasks.length
-    console.log(`[${String(n).padStart(3)}/${rawSingles.length + rawGrids.length * GRID * GRID}] ${g.id}  ${g.tasks.length} 朵 × ${cell}px`)
+    console.log(`[${String(n).padStart(3)}/${rawGrids.length * GRID * GRID}] ${g.id}  ${g.tasks.length} 朵 × ${cell}px`)
   }
 } else if (!EMIT_ONLY) {
   const key = loadApiKey()
@@ -158,23 +144,6 @@ if (has('from-raw')) {
     console.log(
       `[${g.id}] ${g.tasks.length} 朵 × ${cell}px  ${reused ? '（复用原图）' : ''}  ` +
       `${((Date.now() - t0) / 1000).toFixed(1)}s`
-    )
-  })
-
-  // 旧单花批次：同样缺成品才动，raw 在就复用
-  const todoSingles = singles.filter((t) => FORCE || !existsSync(outPath(t.file)))
-  if (todoSingles.length) {
-    console.log(`单花模式待生成 ${todoSingles.length} 张，尺寸 ${SINGLE_SIZE}`)
-  }
-  await pool(todoSingles, CONCURRENCY, async (task) => {
-    const t0 = Date.now()
-    if (FORCE || !existsSync(`${RAW_DIR}${task.id}.png`)) {
-      const png = await textToImage(task.prompt, { key, size: SINGLE_SIZE })
-      writeFileSync(`${RAW_DIR}${task.id}.png`, png)
-    }
-    const info = processSprite(task, readFileSync(`${RAW_DIR}${task.id}.png`))
-    console.log(
-      `[${task.id}] ${task.name}  ${info.kb.toFixed(1)}KB  ${((Date.now() - t0) / 1000).toFixed(1)}s`
     )
   })
 }

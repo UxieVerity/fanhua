@@ -1,5 +1,30 @@
 {
   "size": 256,
-  "count": 0,
-  "flowers": []
+  "count": 4,
+  "flowers": [
+    {
+      "id": "101",
+      "name": "非洲菊·橙红",
+      "species": "非洲菊",
+      "file": "101-gerbera-橙红.webp"
+    },
+    {
+      "id": "102",
+      "name": "非洲菊·明黄",
+      "species": "非洲菊",
+      "file": "102-gerbera-明黄.webp"
+    },
+    {
+      "id": "103",
+      "name": "非洲菊·粉",
+      "species": "非洲菊",
+      "file": "103-gerbera-粉.webp"
+    },
+    {
+      "id": "104",
+      "name": "非洲菊·白",
+      "species": "非洲菊",
+      "file": "104-gerbera-白.webp"
+    }
+  ]
 }

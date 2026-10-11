@@ -1,10 +1,14 @@
 // 花朵图库清单 —— 由 txt2img/generate.mjs 生成，不要手改。
-// 贴图在 img/flowers/ 下，共 0 张，256x256 透明底无损 WebP。
+// 贴图在 img/flowers/ 下，共 4 张，256x256 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
 export const SPRITE_SIZE = 256
 
 export const FLOWERS = [
+  { id: '101', name: '非洲菊·橙红', species: '非洲菊', file: '101-gerbera-橙红.webp' },
+  { id: '102', name: '非洲菊·明黄', species: '非洲菊', file: '102-gerbera-明黄.webp' },
+  { id: '103', name: '非洲菊·粉', species: '非洲菊', file: '103-gerbera-粉.webp' },
+  { id: '104', name: '非洲菊·白', species: '非洲菊', file: '104-gerbera-白.webp' },
 ]
 
 export const FLOWER_COUNT = FLOWERS.length
