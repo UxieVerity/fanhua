@@ -424,6 +424,81 @@ export function keyOutBackground(img, opts = {}) {
     if (y > 0) tryPush(p - w)
     if (y < h - 1) tryPush(p + w)
   }
+  // 第三场：花瓣凹缝里的白底。缝只有几像素宽，过渡带的 3x3 邻域必然扫到
+  // 花瓣，平滑判据在缝里天然失效（实测缝内 flatness 20+），上一场进不去。
+  // 这场只看亮度。但亮度单打有风险：白花瓣通体都亮，会顺着手感纹理的缺口
+  // 灌满整片花瓣 —— 所以新到的区域按连通块验收：8 邻域腐蚀 10 轮（约 21px）
+  // 还剩像素的算「厚」，是白花瓣本体，整块退回；腐蚀完了的才是缝里夹着的
+  // 薄层背景，收下。彩色花瓣不亮，洪水碰不到；细窄的白花瓣尖连着宽的
+  // 花盘主体，同属一个厚连通块，也保得住。10 轮是给花瓣间隙留的：
+  // 翠菊瓣间 15~20px 宽的白底口袋也要能被腐蚀掉，而白花的花盘都大于它。
+  const reached = new Uint8Array(w * h)
+  const queue = []
+  for (let p = 0; p < w * h; p++) if (bg[p]) queue.push(p)
+  while (queue.length) {
+    const p = queue.pop()
+    const x = p % w
+    const y = (p - x) / w
+    const tryPush = (q) => {
+      if (bg[q] || reached[q]) return
+      if (minAt(q) < level[q] - peelTol) return
+      reached[q] = 1
+      queue.push(q)
+    }
+    if (x > 0) tryPush(p - 1)
+    if (x < w - 1) tryPush(p + 1)
+    if (y > 0) tryPush(p - w)
+    if (y < h - 1) tryPush(p + w)
+  }
+  // 连通块标号（8 邻域）
+  const comp = new Int32Array(w * h)
+  let ncomp = 0
+  for (let s = 0; s < w * h; s++) {
+    if (!reached[s] || comp[s]) continue
+    ncomp++
+    comp[s] = ncomp
+    const pixels = [s]
+    for (let i = 0; i < pixels.length; i++) {
+      const p = pixels[i]
+      const x = p % w
+      const y = (p - x) / w
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dy && !dx) continue
+          const yy = y + dy
+          const xx = x + dx
+          if (yy < 0 || yy >= h || xx < 0 || xx >= w) continue
+          const q = yy * w + xx
+          if (reached[q] && !comp[q]) { comp[q] = ncomp; pixels.push(q) }
+        }
+      }
+    }
+  }
+  // 腐蚀 10 轮测厚度：还剩像素的连通块是「厚」的
+  let work = new Uint8Array(w * h)
+  for (let p = 0; p < w * h; p++) work[p] = reached[p]
+  for (let r = 0; r < 10; r++) {
+    const next = new Uint8Array(w * h)
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x
+        if (!work[p]) continue
+        let ok = true
+        for (let dy = -1; dy <= 1 && ok; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const yy = y + dy
+            const xx = x + dx
+            if (yy < 0 || yy >= h || xx < 0 || xx >= w || !work[yy * w + xx]) { ok = false; break }
+          }
+        }
+        if (ok) next[p] = 1
+      }
+    }
+    work = next
+  }
+  const thick = new Uint8Array(ncomp + 1)
+  for (let p = 0; p < w * h; p++) if (work[p]) thick[comp[p]] = 1
+  for (let p = 0; p < w * h; p++) if (reached[p] && !thick[comp[p]]) bg[p] = 1
   const alpha = new Uint8Array(w * h)
   for (let p = 0; p < w * h; p++) alpha[p] = bg[p] ? 0 : 255
   return { width: w, height: h, data, alpha, bgLevel: strict, threshold: strict - tol }
