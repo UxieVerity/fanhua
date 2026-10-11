@@ -78,6 +78,12 @@ Fanhua.init({ imgBase: 'https://cdn.example.com/fanhua/flowers/' })
 
 > 200 张图合计约 10 MB。想让首屏更轻，把 `preload` 设成 `false` 或一个较小的数字。
 
+**`preload` 的三种取法**：
+
+- `true`（默认）：等浏览器空闲时（`requestIdleCallback`，不支持的浏览器退化为 200ms 后）开始预热，每 120ms 一批、每批 4 张，不会一口气糊满带宽。代价是页面打开后后台会悄悄吃掉约 10 MB 流量，换来的是每次点击都秒开。
+- `false`：完全不主动加载，点击时用到哪张才载哪张。单张贴图约 50KB，第一次点到某朵花会有一次现载的延迟，之后同图走缓存。页面本身已经很重、或想给移动端省流量时用这个。
+- 数字 N：只随机预热 N 张，在「后台流量」和「首次点击延迟」之间折中，比如 `preload: 20`。
+
 ### `Fanhua.setOptions(options?)`
 
 随时更新配置，不必重新 `init`。
