@@ -1,6 +1,6 @@
 // 繁花 fanhua —— 点击页面，在手绘花海里绽放
 // 零依赖的原生 JS 插件：每次点击处随机绽放一朵花。
-// 花来自 img/flowers/ 里的 100 张透明底无损 WebP（见 src/flowers.js 清单）。
+// 花来自 img/flowers/ 里的 200 张透明底无损 WebP（见 src/flowers.js 清单）。
 
 import { FLOWERS, FLOWER_COUNT, pickFlower } from './flowers.js'
 
@@ -168,9 +168,21 @@ export function bloom(clientX, clientY, overrides = {}) {
     el.style.top = `${clientY}px`
   } else {
     // 'page'：绝对定位在文档上，随滚动一起走
+    // 贴边点击时把中心往里收：花永远完整落在文档自然范围内，
+    // 不会把 scrollWidth/scrollHeight 撑出滚动条。花本身夹得进去，
+    // 所以这两个基准始终是页面自己的尺寸，不会被上一朵花污染。
+    // 余量不只是半个花宽：弹出动画峰值 scale 1.12，贴图还有 --fanhua-rot
+    // 的随机旋转，transform 的旋转外接框超出盒子几像素、也算滚动区。
+    // 上/左两个方向不用夹 —— 超出原点的溢出不产生滚动条。
+    const half = size / 2
+    const rad = ((o.rotate > 0 ? o.rotate : 0) * Math.PI) / 180
+    const margin = half * 1.12 * (Math.cos(rad) + Math.sin(rad))
+    const doc = document.documentElement
+    const x = Math.min(clientX + window.scrollX, Math.max(doc.scrollWidth, doc.clientWidth) - margin)
+    const y = Math.min(clientY + window.scrollY, Math.max(doc.scrollHeight, doc.clientHeight) - margin)
     el.style.position = 'absolute'
-    el.style.left = `${clientX + window.scrollX}px`
-    el.style.top = `${clientY + window.scrollY}px`
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
   }
   el.style.zIndex = String(o.zIndex)
 
