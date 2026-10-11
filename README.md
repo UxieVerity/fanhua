@@ -30,7 +30,7 @@ npm install fanhua
 
 花图在 `img/flowers/` 里，跟着插件一起发布即可。
 
-> **浏览器要求**：贴图是无损 WebP，需要浏览器支持 WebP。Chrome 32+ / Firefox 65+ / Safari 14+ / Edge 18+ 都没问题，覆盖率 97% 以上；IE、Safari 13 及更早、以及部分老 Android WebView 开不出花（不报错，只是点了没反应）。如果要覆盖这些环境，自己把 `img/flowers/` 换成 PNG 并把 `src/flowers.ts` 里的 `file` 后缀改成 `.png` 即可，插件不关心扩展名。
+> **浏览器要求**：贴图是无损 WebP，需要浏览器支持 WebP。Chrome 32+ / Firefox 65+ / Safari 14+ / Edge 18+ 都没问题，覆盖率 97% 以上；IE、Safari 13 及更早、以及部分老 Android WebView 开不出花（不报错，只是点了没反应）。如果要覆盖这些环境，自己把 `img/flowers/` 换成 PNG 并把 `src/flowers.ts` 展开处的 `.webp` 后缀改成 `.png` 即可，插件不关心扩展名。
 
 ## 快速上手
 

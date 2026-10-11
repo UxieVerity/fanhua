@@ -32,7 +32,7 @@
 // 发布出去的 WebP 本项目解不开（零依赖，没有 WebP 解码器）。
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { buildTasks, buildGrids } from './prompts.ts'
+import { buildTasks, buildGrids, SPECIES } from './prompts.ts'
 import type { FlowerTask, GridTask } from './prompts.ts'
 import { textToImage, loadApiKey, pool } from './api.ts'
 import { decodePng, crop, toFlowerSprite, encodePng, auditSprite } from '../scripts/png.ts'
@@ -207,12 +207,24 @@ writeFileSync(
   JSON.stringify({ size: SPRITE_SIZE, count: entries.length, flowers: entries }, null, 2) + '\n'
 )
 
-const lines = entries.map(
-  (e) => `  { id: '${e.id}', name: '${e.name}', species: '${e.species}', file: '${e.file}' },`
+// 清单源数据按花种压表（一种花一行）：cn 中文名、key 拼 file 用、
+// colors 是花名里的颜色写法（prompt 颜色去掉结尾的「色」）。运行时再展开
+// 成逐朵的 FLOWERS —— 形态不变，体积缩到约 1/3。
+const speciesRows = [...SPECIES]
+  .sort((a, b) => a.index - b.index)
+  .map((sp) => ({
+    cn: sp.cn,
+    key: sp.key,
+    colors: sp.colors.map((c) => c.replace(/色$/, '')),
+  }))
+const speciesLines = speciesRows.map(
+  (r) => `  { cn: '${r.cn}', key: '${r.key}', colors: [${r.colors.map((c) => `'${c}'`).join(', ')}] },`
 )
 writeFileSync(
   `${ROOT}src/flowers.ts`,
   `// 花朵图库清单 —— 由 txt2img/generate.ts 生成，不要手改。
+// 源数据按花种压成一张表（一种花一行、4 色一列），加载时展开成逐朵的
+// FLOWERS —— 运行时形态与逐朵写法完全一致，源码/打包体积缩到约 1/3。
 // 贴图在 img/flowers/ 下，共 ${entries.length} 张，${SPRITE_SIZE}x${SPRITE_SIZE} 透明底无损 WebP。
 // 命名规则：编号-花名-颜色.webp，同一种花有多种颜色。
 
@@ -229,9 +241,26 @@ export interface Flower {
 
 export const SPRITE_SIZE = ${SPRITE_SIZE}
 
-export const FLOWERS: Flower[] = [
-${lines.join('\n')}
+// 一种花一行：cn 中文名、key 拼文件名用的英文、colors 花名里的颜色写法。
+// 颜色以花名为准（如 '紫黄双'），文件名里的颜色自动去掉结尾的 '双'。
+const SPECIES: { cn: string; key: string; colors: string[] }[] = [
+${speciesLines.join('\n')}
 ]
+
+// 展开花种表：编号按清单顺序连续排（001~${entries.length}），一种花正好 4 色
+let n = 0
+export const FLOWERS: Flower[] = SPECIES.flatMap(({ cn, key, colors }) =>
+  colors.map((color) => {
+    n++
+    const id = String(n).padStart(3, '0')
+    return {
+      id,
+      name: \`\${cn}·\${color}\`,
+      species: cn,
+      file: \`\${id}-\${key}-\${color.replace(/双$/, '')}.webp\`,
+    }
+  })
+)
 
 export const FLOWER_COUNT: number = FLOWERS.length
 
