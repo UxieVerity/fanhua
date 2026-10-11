@@ -6,6 +6,5 @@ dist/
 # 密钥只放本地
 .env
 
-# 生图管线：raw 原图 ~190MB 不进库；sprites 可用 --from-raw 重新生成
-txt2img/raw/
+# 生图管线：sprites 可用 --from-raw 重新生成（raw 原图已入库，换机器不再丢）
 txt2img/check.png
